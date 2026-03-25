@@ -110,12 +110,10 @@ def run_vllm_benchmark(llm, batch_sizes, max_new_tokens=MAX_NEW_TOKENS, max_prom
     it fills GPU compute slots as individual sequences finish,
     never waiting for the slowest in a batch.
     """
-    # vLLM's `SamplingParams.max_tokens` semantics vary by version (some interpret as
-    # total prompt+output tokens). We overshoot with a padding margin so the model
-    # reliably generates the intended length.
-    pad_tokens = 256
     sampling_params = SamplingParams(
-        max_tokens=max_prompt_len + max_new_tokens + pad_tokens,
+        # vLLM generally interprets `max_tokens` as TOTAL tokens (prompt + generated).
+        # We set it to (max_prompt_len + desired new tokens) so generation length is consistent.
+        max_tokens=max_prompt_len + max_new_tokens,
         temperature=0,  # greedy = deterministic = fair comparison
     )
     results = {}
@@ -127,7 +125,7 @@ def run_vllm_benchmark(llm, batch_sizes, max_new_tokens=MAX_NEW_TOKENS, max_prom
         # Warmup
         llm.generate(
             get_batch_prompts(1),
-            SamplingParams(max_tokens=max_prompt_len + 10 + pad_tokens, temperature=0),
+            SamplingParams(max_tokens=max_prompt_len + 10, temperature=0),
         )
 
         run_data = []
@@ -136,16 +134,18 @@ def run_vllm_benchmark(llm, batch_sizes, max_new_tokens=MAX_NEW_TOKENS, max_prom
             outputs = llm.generate(prompts, sampling_params)
             wall_time = time.perf_counter() - t0
 
-            # Prefer token counting from generated text to avoid any version-specific
-            # differences in vLLM's internal `token_ids` field.
+            # vLLM token accounting is the most stable via token_ids.
+            # Some vLLM runs leave `.text` empty depending on configuration,
+            # so count from `token_ids` first, fallback to `.text` if missing.
             total_new_tokens = 0
-            if tokenizer is None:
-                # fallback to whatever vLLM provides
-                total_new_tokens = sum(len(o.outputs[0].token_ids) for o in outputs)
-            else:
-                for o in outputs:
-                    gen_text = o.outputs[0].text or ""
-                    total_new_tokens += len(tokenizer.encode(gen_text, add_special_tokens=False))
+            for o in outputs:
+                if o.outputs and o.outputs[0].token_ids is not None:
+                    total_new_tokens += len(o.outputs[0].token_ids)
+                else:
+                    gen_text = (o.outputs[0].text if o.outputs else "") or ""
+                    if tokenizer is not None and gen_text:
+                        total_new_tokens += len(tokenizer.encode(gen_text, add_special_tokens=False))
+                    # if still empty, keep 0
             total_tok_per_sec = total_new_tokens / wall_time if wall_time > 0 else 0
             per_prompt_ms     = (wall_time / bs) * 1000
 
@@ -387,9 +387,10 @@ def main():
     # Compute maximum prompt length so we can set vLLM's max_tokens budget
     # (prompt + new tokens). We use the same tokenizer as token-counting.
     hf_tokenizer = AutoTokenizer.from_pretrained(args.model)
-    prompt_lens = [len(hf_tokenizer.encode(p, add_special_tokens=False)) for p in PROMPT_POOL]
+    # Include special tokens so prompt length matches what the model sees more closely.
+    prompt_lens = [len(hf_tokenizer.encode(p, add_special_tokens=True)) for p in PROMPT_POOL]
     max_prompt_len = max(prompt_lens) if prompt_lens else 0
-    max_model_len = max_prompt_len + args.max_tokens + 512
+    max_model_len = max_prompt_len + args.max_tokens + 128
 
     # ── Load vLLM engine ──────────────────────────────────────────────────────
     print("\n[LOAD] Initialising vLLM engine (this takes ~60s on first run)...")
