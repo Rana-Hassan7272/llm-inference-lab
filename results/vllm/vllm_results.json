@@ -1,0 +1,34 @@
+[
+  {
+    "batch_size": 1,
+    "total_tok_per_sec": 37.0,
+    "per_prompt_ms": 27.0,
+    "wall_time_ms": 27.0,
+    "total_new_tokens": 1,
+    "engine": "vllm"
+  },
+  {
+    "batch_size": 2,
+    "total_tok_per_sec": 68.32,
+    "per_prompt_ms": 14.6,
+    "wall_time_ms": 29.3,
+    "total_new_tokens": 2,
+    "engine": "vllm"
+  },
+  {
+    "batch_size": 4,
+    "total_tok_per_sec": 143.04,
+    "per_prompt_ms": 7.2,
+    "wall_time_ms": 28.6,
+    "total_new_tokens": 4,
+    "engine": "vllm"
+  },
+  {
+    "batch_size": 8,
+    "total_tok_per_sec": 301.53,
+    "per_prompt_ms": 3.3,
+    "wall_time_ms": 26.6,
+    "total_new_tokens": 8,
+    "engine": "vllm"
+  }
+]

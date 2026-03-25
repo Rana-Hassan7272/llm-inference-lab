@@ -1,0 +1,18 @@
+[
+  {
+    "prompt": "Write a Python binary search function",
+    "answer": "that takes in an array and a target value as input, and returns the index of the target value in the array. The function should use a binary search algorithm to find the target value. The function should be efficient and handle large arrays efficiently. The function should also handle cases where the target value is not present in the array. The function should be well-documented and follow PEP 8 style guidelines.",
+    "routing": {
+      "tier": "balanced",
+      "precision": "8-bit",
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.65) \u2014 balanced precision",
+      "prompt_len": 7,
+      "task_type": "reasoning",
+      "confidence": 0.65
+    },
+    "tok_per_sec": 9.29,
+    "ttft_ms": 437.9,
+    "total_ms": 9256.5,
+    "mem_gb": 1.29
+  }
+]

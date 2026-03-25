@@ -53,6 +53,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 # ══════════════════════════════════════════════════════════════════════════════
 DEFAULT_MODEL    = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 DEFAULT_SEQ_LENS = [128, 256, 512, 1024]
+DEFAULT_NEW_TOKENS = 64         # fixed generation length for fair comparisons
 N_REPEATS        = 3          # average over N runs to reduce noise
 WARMUP_RUNS      = 1          # discard first run (GPU warm-up)
 
@@ -98,7 +99,7 @@ def print_row(label, value):
 #  CORE BENCHMARK: single run at one sequence length, one cache setting
 # ══════════════════════════════════════════════════════════════════════════════
 def benchmark_single(
-    model, tokenizer, prompt_text, target_new_tokens, use_cache, device
+    model, tokenizer, input_ids, attention_mask, new_tokens, use_cache, device
 ):
     """
     Returns dict with:
@@ -108,13 +109,7 @@ def benchmark_single(
       - new_tokens    : how many tokens were actually generated
       - mem_gb        : GPU memory at end
     """
-    # Encode prompt
-    inputs = tokenizer(
-        prompt_text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=512,      # cap INPUT so we're measuring generation, not encoding
-    ).to(device)
+    input_len = input_ids.shape[1]
 
     # ── Time to First Token ────────────────────────────────────────────────────
     if device.type == "cuda":
@@ -123,8 +118,10 @@ def benchmark_single(
 
     with torch.no_grad():
         _ = model.generate(
-            **inputs,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
             max_new_tokens=1,
+            min_new_tokens=1,
             do_sample=False,
             use_cache=use_cache,
             pad_token_id=tokenizer.eos_token_id,
@@ -141,8 +138,10 @@ def benchmark_single(
 
     with torch.no_grad():
         output = model.generate(
-            **inputs,
-            max_new_tokens=target_new_tokens,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=new_tokens,
+            min_new_tokens=new_tokens,
             do_sample=False,
             use_cache=use_cache,
             pad_token_id=tokenizer.eos_token_id,
@@ -152,7 +151,6 @@ def benchmark_single(
         torch.cuda.synchronize()
     total_ms = (time.perf_counter() - t1) * 1000
 
-    input_len  = inputs["input_ids"].shape[1]
     new_tokens = output.shape[1] - input_len
     tok_per_sec = (new_tokens / (total_ms / 1000)) if total_ms > 0 else 0
 
@@ -165,6 +163,21 @@ def benchmark_single(
     }
 
 
+def build_context_tensors(base_ids, filler_ids, seq_len, device):
+    """
+    Build a single-example context with exact length = seq_len tokens.
+    (This makes "sequence length" mean INPUT/context length, matching the roadmap.)
+    """
+    ids = base_ids[:seq_len].copy()
+    while len(ids) < seq_len:
+        ids.extend(filler_ids)
+    ids = ids[:seq_len]
+
+    input_ids = torch.tensor([ids], dtype=torch.long, device=device)
+    attention_mask = torch.ones_like(input_ids)
+    return input_ids, attention_mask
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  SWEEP: all sequence lengths × both cache settings
 # ══════════════════════════════════════════════════════════════════════════════
@@ -172,6 +185,15 @@ def run_sweep(model, tokenizer, seq_lens, device, n_repeats=N_REPEATS):
     results = {}   # keyed by (seq_len, cache_mode)
 
     for seq_len in seq_lens:
+        # Build a fixed-length context (INPUT tokens) for this seq_len.
+        # We keep generation length fixed so differences come from KV-cache behavior.
+        input_ids, attention_mask = build_context_tensors(
+            base_ids=tokenizer._kv_cache_base_ids,   # injected in main() after tokenizer load
+            filler_ids=tokenizer._kv_cache_filler_ids, # injected in main()
+            seq_len=seq_len,
+            device=device,
+        )
+
         for use_cache, label in [(True, "cache_on"), (False, "cache_off")]:
             print_header(f"seq_len={seq_len}  |  cache={'ON' if use_cache else 'OFF'}")
 
@@ -179,12 +201,18 @@ def run_sweep(model, tokenizer, seq_lens, device, n_repeats=N_REPEATS):
 
             # Warmup
             for _ in range(WARMUP_RUNS):
-                benchmark_single(model, tokenizer, BASE_PROMPT, seq_len, use_cache, device)
+                benchmark_single(
+                    model, tokenizer, input_ids, attention_mask,
+                    new_tokens=tokenizer._kv_cache_new_tokens,
+                    use_cache=use_cache, device=device
+                )
 
             # Actual runs
             for i in range(n_repeats):
                 r = benchmark_single(
-                    model, tokenizer, BASE_PROMPT, seq_len, use_cache, device
+                    model, tokenizer, input_ids, attention_mask,
+                    new_tokens=tokenizer._kv_cache_new_tokens,
+                    use_cache=use_cache, device=device
                 )
                 run_times.append(r)
                 print_row(f"  Run {i+1}/{n_repeats}",
@@ -250,7 +278,7 @@ def plot_speedup(results, seq_lens, output_path="kv_cache_speedup.png"):
     ax.axhline(y=1.0, color="#ff6b6b", linestyle="--", linewidth=1.5, alpha=0.8,
                label="No speedup (1×)")
 
-    ax.set_xlabel("Sequence Length (new tokens generated)", color="white", fontsize=12)
+    ax.set_xlabel("Context Length (input tokens)", color="white", fontsize=12)
     ax.set_ylabel("Speedup (Cache ON / Cache OFF)", color="white", fontsize=12)
     ax.set_title("KV Cache Speedup vs Sequence Length\n"
                  "Longer sequences → More dramatic cache benefit",
@@ -302,7 +330,7 @@ def plot_tokpersec(results, seq_lens, output_path="kv_cache_tokpersec.png"):
             color="white", fontsize=9
         )
 
-    ax.set_xlabel("Sequence Length (tokens generated)", color="white", fontsize=12)
+    ax.set_xlabel("Context Length (input tokens)", color="white", fontsize=12)
     ax.set_ylabel("Tokens per Second", color="white", fontsize=12)
     ax.set_title("Throughput: KV Cache ON vs OFF",
                  color="white", fontsize=14, fontweight="bold", pad=15)
@@ -349,7 +377,7 @@ def plot_ttft(results, seq_lens, output_path="kv_cache_ttft.png"):
                     textcoords="offset points", xytext=(0, -18),
                     color="#ff6b6b", fontsize=9, ha="center")
 
-    ax.set_xlabel("Sequence Length (tokens generated)", color="white", fontsize=12)
+    ax.set_xlabel("Context Length (input tokens)", color="white", fontsize=12)
     ax.set_ylabel("Time to First Token (ms)", color="white", fontsize=12)
     ax.set_title("Time to First Token: KV Cache ON vs OFF",
                  color="white", fontsize=14, fontweight="bold", pad=15)
@@ -374,7 +402,7 @@ def print_summary(results, seq_lens):
     print("\n")
     print("╔══════════╦═══════════════╦═══════════════╦══════════╦═══════════╗")
     print("║ Seq Len  ║ Cache ON      ║ Cache OFF     ║ Speedup  ║ TTFT diff ║")
-    print("║ (tokens) ║ (tok/sec)     ║ (tok/sec)     ║          ║           ║")
+    print("║ (context)║ (tok/sec)     ║ (tok/sec)     ║          ║           ║")
     print("╠══════════╬═══════════════╬═══════════════╬══════════╬═══════════╣")
     for sl in seq_lens:
         on     = results[(sl, "cache_on")]
@@ -410,6 +438,8 @@ def main():
     parser.add_argument("--seq-lens", nargs="+", type=int,
                         default=DEFAULT_SEQ_LENS,
                         help="Sequence lengths to test, e.g. --seq-lens 128 256 512")
+    parser.add_argument("--new-tokens", type=int, default=DEFAULT_NEW_TOKENS,
+                        help="Fixed number of new tokens to generate per run (default: 64)")
     parser.add_argument("--repeats",  type=int, default=N_REPEATS,
                         help="Number of timed runs per config (default: 3)")
     parser.add_argument("--cpu",      action="store_true",
@@ -431,6 +461,17 @@ def main():
     print("\n[LOAD] Loading tokenizer and model...")
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     tokenizer.pad_token = tokenizer.eos_token
+
+    # Precompute fixed token sequences so "seq_len" means INPUT/context length.
+    base_ids = tokenizer.encode(BASE_PROMPT, add_special_tokens=False)
+    filler_ids = tokenizer.encode(" The quick brown fox jumps over the lazy dog.", add_special_tokens=False)
+    if not filler_ids:
+        filler_ids = [tokenizer.eos_token_id]
+
+    # Inject into tokenizer so run_sweep can build contexts without expanding function signatures.
+    tokenizer._kv_cache_base_ids = base_ids
+    tokenizer._kv_cache_filler_ids = filler_ids
+    tokenizer._kv_cache_new_tokens = args.new_tokens
 
     dtype = torch.float16 if device.type == "cuda" else torch.float32
     model = AutoModelForCausalLM.from_pretrained(

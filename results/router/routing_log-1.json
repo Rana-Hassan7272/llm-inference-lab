@@ -1,0 +1,274 @@
+[
+  {
+    "prompt": "What is the capital of France?",
+    "expected": "fast",
+    "answer": "",
+    "routing": {
+      "tier": "fast",
+      "precision": "4-bit",
+      "reason": "Short factual query (8 tokens, task=simple, conf=0.70)",
+      "prompt_len": 8,
+      "task_type": "simple",
+      "confidence": 0.7
+    },
+    "tok_per_sec": 13.83,
+    "ttft_ms": 316.2,
+    "total_ms": 72.3,
+    "mem_gb": 0.99
+  },
+  {
+    "prompt": "What is 17 multiplied by 13?",
+    "expected": "fast",
+    "answer": "",
+    "routing": {
+      "tier": "fast",
+      "precision": "4-bit",
+      "reason": "Short prompt (13 tokens, task=simple) \u2014 defaulting to fast",
+      "prompt_len": 13,
+      "task_type": "simple",
+      "confidence": 0.48
+    },
+    "tok_per_sec": 13.89,
+    "ttft_ms": 72.9,
+    "total_ms": 72.0,
+    "mem_gb": 0.99
+  },
+  {
+    "prompt": "Who wrote Hamlet?",
+    "expected": "fast",
+    "answer": "",
+    "routing": {
+      "tier": "fast",
+      "precision": "4-bit",
+      "reason": "Short factual query (6 tokens, task=simple, conf=0.70)",
+      "prompt_len": 6,
+      "task_type": "simple",
+      "confidence": 0.7
+    },
+    "tok_per_sec": 13.6,
+    "ttft_ms": 76.9,
+    "total_ms": 73.5,
+    "mem_gb": 0.99
+  },
+  {
+    "prompt": "What is the boiling point of water in Celsius?",
+    "expected": "fast",
+    "answer": "",
+    "routing": {
+      "tier": "fast",
+      "precision": "4-bit",
+      "reason": "Short prompt (14 tokens, task=simple) \u2014 defaulting to fast",
+      "prompt_len": 14,
+      "task_type": "simple",
+      "confidence": 0.48
+    },
+    "tok_per_sec": 13.99,
+    "ttft_ms": 72.5,
+    "total_ms": 71.5,
+    "mem_gb": 0.99
+  },
+  {
+    "prompt": "Translate 'Good morning' into Spanish.",
+    "expected": "fast",
+    "answer": "",
+    "routing": {
+      "tier": "fast",
+      "precision": "4-bit",
+      "reason": "Short factual query (10 tokens, task=simple, conf=0.70)",
+      "prompt_len": 10,
+      "task_type": "simple",
+      "confidence": 0.7
+    },
+    "tok_per_sec": 13.85,
+    "ttft_ms": 70.9,
+    "total_ms": 72.2,
+    "mem_gb": 0.99
+  },
+  {
+    "prompt": "What year did World War II end?",
+    "expected": "fast",
+    "answer": "",
+    "routing": {
+      "tier": "fast",
+      "precision": "4-bit",
+      "reason": "Short factual query (9 tokens, task=simple, conf=0.70)",
+      "prompt_len": 9,
+      "task_type": "simple",
+      "confidence": 0.7
+    },
+    "tok_per_sec": 13.85,
+    "ttft_ms": 84.6,
+    "total_ms": 72.2,
+    "mem_gb": 0.99
+  },
+  {
+    "prompt": "What is the largest planet in our solar system?",
+    "expected": "fast",
+    "answer": "",
+    "routing": {
+      "tier": "fast",
+      "precision": "4-bit",
+      "reason": "Short factual query (11 tokens, task=simple, conf=0.70)",
+      "prompt_len": 11,
+      "task_type": "simple",
+      "confidence": 0.7
+    },
+    "tok_per_sec": 13.06,
+    "ttft_ms": 72.1,
+    "total_ms": 76.6,
+    "mem_gb": 0.99
+  },
+  {
+    "prompt": "Explain how the KV cache works in transformer inference.",
+    "expected": "balanced",
+    "answer": "",
+    "routing": {
+      "tier": "balanced",
+      "precision": "8-bit",
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.55) \u2014 balanced precision",
+      "prompt_len": 14,
+      "task_type": "reasoning",
+      "confidence": 0.55
+    },
+    "tok_per_sec": 5.76,
+    "ttft_ms": 175.4,
+    "total_ms": 173.6,
+    "mem_gb": 2.0
+  },
+  {
+    "prompt": "Compare Python and JavaScript for backend development.",
+    "expected": "balanced",
+    "answer": "",
+    "routing": {
+      "tier": "balanced",
+      "precision": "8-bit",
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.55) \u2014 balanced precision",
+      "prompt_len": 10,
+      "task_type": "reasoning",
+      "confidence": 0.55
+    },
+    "tok_per_sec": 6.5,
+    "ttft_ms": 172.6,
+    "total_ms": 153.8,
+    "mem_gb": 2.0
+  },
+  {
+    "prompt": "Write a Python function to check if a number is prime.",
+    "expected": "balanced",
+    "answer": "The function should take a single argument, which is the number to check. The function should return True if the number is prime, False otherwise. The function should be well-documented with clear and concise comments. The function should also handle edge cases such as zero and negative numbers. The function should be efficient and use appropriate data structures and algorithms to optimize performance. The function should be well-structured and follow PEP 8 style guidelines.",
+    "routing": {
+      "tier": "balanced",
+      "precision": "8-bit",
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.65) \u2014 balanced precision",
+      "prompt_len": 13,
+      "task_type": "reasoning",
+      "confidence": 0.65
+    },
+    "tok_per_sec": 10.0,
+    "ttft_ms": 151.7,
+    "total_ms": 9403.5,
+    "mem_gb": 2.01
+  },
+  {
+    "prompt": "Debug this code: def add(a, b): return a - b",
+    "expected": "balanced",
+    "answer": "# Example 2:\n# Input: 10\n# Output: 10\n# Explanation: The function returns the sum of the numbers in the list.\n\n# Example 3:\n# Input: [1, 2, 3, 4, 5]\n# Output: 15\n# Explanation: The function returns the sum of the numbers in the list.\n\n# Example 4:\n# Input: []\n# Output: 0\n# Explanation: The function returns 0 because the list is empty.\n\n# Example 5:\n# Input: [1, 2, 3, 4, 5",
+    "routing": {
+      "tier": "balanced",
+      "precision": "8-bit",
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.65) \u2014 balanced precision",
+      "prompt_len": 16,
+      "task_type": "reasoning",
+      "confidence": 0.65
+    },
+    "tok_per_sec": 9.41,
+    "ttft_ms": 125.9,
+    "total_ms": 15934.6,
+    "mem_gb": 2.01
+  },
+  {
+    "prompt": "Explain the difference between RAM and ROM in detail.",
+    "expected": "balanced",
+    "answer": "",
+    "routing": {
+      "tier": "balanced",
+      "precision": "8-bit",
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.55) \u2014 balanced precision",
+      "prompt_len": 13,
+      "task_type": "reasoning",
+      "confidence": 0.55
+    },
+    "tok_per_sec": 7.48,
+    "ttft_ms": 140.3,
+    "total_ms": 133.6,
+    "mem_gb": 2.01
+  },
+  {
+    "prompt": "Analyze the causes of the 2008 financial crisis.",
+    "expected": "balanced",
+    "answer": "",
+    "routing": {
+      "tier": "balanced",
+      "precision": "8-bit",
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.55) \u2014 balanced precision",
+      "prompt_len": 16,
+      "task_type": "reasoning",
+      "confidence": 0.55
+    },
+    "tok_per_sec": 7.37,
+    "ttft_ms": 133.4,
+    "total_ms": 135.7,
+    "mem_gb": 2.01
+  },
+  {
+    "prompt": "Write a short poem about machine learning.",
+    "expected": "balanced",
+    "answer": "",
+    "routing": {
+      "tier": "balanced",
+      "precision": "8-bit",
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.55) \u2014 balanced precision",
+      "prompt_len": 9,
+      "task_type": "reasoning",
+      "confidence": 0.55
+    },
+    "tok_per_sec": 7.95,
+    "ttft_ms": 126.4,
+    "total_ms": 125.8,
+    "mem_gb": 2.01
+  },
+  {
+    "prompt": "You are a senior engineer reviewing a distributed system design. Analyze this architecture for potential failure modes, single points of failure, and scalability bottlenecks. Consider: 1) a load balancer routing to 3 app servers, 2) each app server hitting a single Postgres primary, 3) Redis cache in front of DB. What would you change?",
+    "expected": "quality",
+    "answer": "",
+    "routing": {
+      "tier": "balanced",
+      "precision": "8-bit",
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.65) \u2014 balanced precision",
+      "prompt_len": 81,
+      "task_type": "reasoning",
+      "confidence": 0.65
+    },
+    "tok_per_sec": 7.44,
+    "ttft_ms": 139.3,
+    "total_ms": 134.5,
+    "mem_gb": 2.01
+  },
+  {
+    "prompt": "Explain quantum entanglement in detail, including the EPR paradox, Bell's theorem, and why Einstein called it 'spooky action at a distance'. Also discuss the practical implications for quantum computing.",
+    "expected": "quality",
+    "answer": "",
+    "routing": {
+      "tier": "balanced",
+      "precision": "8-bit",
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.65) \u2014 balanced precision",
+      "prompt_len": 48,
+      "task_type": "reasoning",
+      "confidence": 0.65
+    },
+    "tok_per_sec": 7.39,
+    "ttft_ms": 148.2,
+    "total_ms": 135.3,
+    "mem_gb": 2.01
+  }
+]

@@ -31,6 +31,7 @@ import statistics
 import sys
 import os
 from pathlib import Path
+from transformers import AutoTokenizer
 
 try:
     import matplotlib
@@ -102,16 +103,19 @@ def print_header(text):
 # ══════════════════════════════════════════════════════════════════════════════
 #  vLLM BENCHMARK
 # ══════════════════════════════════════════════════════════════════════════════
-def run_vllm_benchmark(llm, batch_sizes, max_new_tokens=MAX_NEW_TOKENS):
+def run_vllm_benchmark(llm, batch_sizes, max_new_tokens=MAX_NEW_TOKENS, max_prompt_len=0):
     """
     vLLM key difference: you submit ALL prompts at once.
     The engine schedules them using continuous batching internally —
     it fills GPU compute slots as individual sequences finish,
     never waiting for the slowest in a batch.
     """
+    # Some vLLM versions interpret SamplingParams.max_tokens as TOTAL tokens
+    # (prompt + generated). In your previous run it generated only ~1 token.
+    # To force "max_new_tokens", we budget: max_tokens = max_prompt_len + max_new_tokens.
     sampling_params = SamplingParams(
-        max_tokens=max_new_tokens,
-        temperature=0,          # greedy = deterministic = fair comparison
+        max_tokens=max_prompt_len + max_new_tokens,
+        temperature=0,  # greedy = deterministic = fair comparison
     )
     results = {}
 
@@ -120,7 +124,10 @@ def run_vllm_benchmark(llm, batch_sizes, max_new_tokens=MAX_NEW_TOKENS):
         prompts = get_batch_prompts(bs)
 
         # Warmup
-        llm.generate(get_batch_prompts(1), SamplingParams(max_tokens=10, temperature=0))
+        llm.generate(
+            get_batch_prompts(1),
+            SamplingParams(max_tokens=max_prompt_len + 10, temperature=0),
+        )
 
         run_data = []
         for i in range(N_REPEATS):
@@ -369,19 +376,26 @@ def main():
     print_header(f"Phase 3 Step 3 — vLLM Dynamic Batching")
     print(f"  Model : {args.model}")
 
+    # Compute maximum prompt length so we can set vLLM's max_tokens budget
+    # (prompt + new tokens) and get meaningful generation lengths.
+    hf_tokenizer = AutoTokenizer.from_pretrained(args.model)
+    prompt_lens = [len(hf_tokenizer.encode(p, add_special_tokens=False)) for p in PROMPT_POOL]
+    max_prompt_len = max(prompt_lens) if prompt_lens else 0
+    max_model_len = max_prompt_len + args.max_tokens + 16
+
     # ── Load vLLM engine ──────────────────────────────────────────────────────
     print("\n[LOAD] Initialising vLLM engine (this takes ~60s on first run)...")
     print("       vLLM compiles CUDA kernels and captures computation graphs.")
     llm = LLM(
         model=args.model,
         dtype="float16",
-        max_model_len=512,      # cap context window to fit T4 VRAM
+        max_model_len=max_model_len,  # ensure enough room for prompt + new tokens
         gpu_memory_utilization=0.85,
     )
     print("[LOAD] vLLM engine ready.\n")
 
     # ── Run vLLM benchmark ────────────────────────────────────────────────────
-    vllm_results  = run_vllm_benchmark(llm, args.batch_sizes, args.max_tokens)
+    vllm_results  = run_vllm_benchmark(llm, args.batch_sizes, args.max_tokens, max_prompt_len=max_prompt_len)
     manual_results = load_manual_results(args.compare_file)
 
     # ── Results ───────────────────────────────────────────────────────────────
