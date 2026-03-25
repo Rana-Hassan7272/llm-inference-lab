@@ -36,17 +36,15 @@ This doc summarizes what you completed for Phase 3 and what must be corrected/re
 
 Your current `kv_cache_results.json` shows:
 - `seq_len` = 128/256/512/1024
-- `new_tokens` stayed constant at `14` for every run (both KV cache ON and OFF)
+- `new_tokens` is now constant at `64` for every run (both KV cache ON and OFF)
 
-Observed aggregates (from your logs / `kv_cache_results.json`):
-- Seq 128: cache ON tok/s `25.68`, cache OFF tok/s `31.18`, speedup `0.82×`
-- Seq 256: cache ON tok/s `34.02`, cache OFF tok/s `31.13`, speedup `1.09×`
-- Seq 512: cache ON tok/s `34.86`, cache OFF tok/s `31.37`, speedup `1.11×`
-- Seq 1024: cache ON tok/s `28.63`, cache OFF tok/s `28.72`, speedup `1.00×`
+Observed aggregates (your latest rerun):
+- Seq 128: cache ON tok/s `32.36`, cache OFF tok/s `30.57`, speedup `1.06×`
+- Seq 256: cache ON tok/s `31.34`, cache OFF tok/s `17.33`, speedup `1.81×`
+- Seq 512: cache ON tok/s `29.78`, cache OFF tok/s `7.75`, speedup `3.84×`
+- Seq 1024: cache ON tok/s `29.12`, cache OFF tok/s `2.84`, speedup `10.25×`
 
-This pattern is not a “clean KV cache scaling curve” because the experiment is currently not holding the generation length constant (the model stops early at ~14 tokens).
-
-Additionally, the implementation you ran treated “sequence length” as `max_new_tokens` rather than true *context length*. The roadmap asks for *sequence length* scaling (context), so the interpretation doesn’t fully match the requirement.
+This now matches the roadmap expectation: **as context length grows, KV cache increasingly improves throughput**.
 
 ✅ Fix applied in code:
 - I patched `optimization/kv_cache_experiment.py` so:
@@ -54,8 +52,8 @@ Additionally, the implementation you ran treated “sequence length” as `max_n
   - generation uses a fixed number of new tokens (`--new-tokens`, default `64`)
   - `min_new_tokens` is enforced so output length doesn’t collapse early
 
-Required rerun:
-- Rerun KV cache Step 1 on Colab GPU using the patched script, then regenerate the same `results/kv_cache_experiment-results/*` charts/JSON.
+Status:
+- KV cache Step 1 is now aligned with the roadmap and can be used as-is for Phase 4.
 
 ## Static batching (Step 2) — good and consistent
 
@@ -71,20 +69,22 @@ This step looks production-reasonable and is consistent with the roadmap’s int
 
 ## vLLM dynamic batching (Step 3) — current comparison is not fair yet
 
-Your `results/vllm/vllm_results.json` indicates:
+Your `results/vllm/vllm_results.json` still indicates:
 - `total_new_tokens` equals the batch size exactly:
   - batch 1 → 1 new token
   - batch 2 → 2 new tokens
   - batch 4 → 4 new tokens
   - batch 8 → 8 new tokens
 
-That means the vLLM run generated only ~1 token per prompt, so it is not comparable to manual batching where you benchmarked full generation length.
+That means vLLM generation is still not aligned with the manual batching generation length, so Phase 4 is still blocked until vLLM Step 3 is re-run with the updated script.
 
-✅ Fix applied in code:
-- I patched `benchmarks/batching_comparison-vllm.py` so it computes prompt lengths and budgets vLLM’s `SamplingParams(max_tokens=prompt_len + max_new_tokens)` and increases `max_model_len` accordingly.
+✅ Fix applied in code (needs rerun output refresh):
+- I patched `benchmarks/batching_comparison-vllm.py` to:
+  - compute generated token counts from generated text (more reliable than vLLM’s internal token_ids field)
+  - increase token budget padding so generation doesn’t truncate to ~1 token
 
 Required rerun:
-- Rerun the vLLM comparison on Colab GPU using the patched script, then regenerate `results/vllm/*`.
+- Re-run vLLM Step 3 on Colab GPU to regenerate `results/vllm/*`.
 
 ## Adaptive router (Step 4) — working, minor tier expectation mismatch
 
@@ -102,11 +102,10 @@ This is acceptable as an MVP, but for “interview impressiveness” you can lat
 
 Not yet.
 
-Phase 3 is functionally done (you produced KV cache, batching, vLLM, and a working adaptive router), but **the KV cache Step 1 and vLLM Step 3 measurements are not aligned with the roadmap definition** due to fixed-length/context-length issues.
+Phase 3 is functionally done except **vLLM Step 3 is still not aligned** (it’s still producing ~1 token per prompt in the metrics).
 
-To safely move to Phase 4, rerun:
-1. `optimization/kv_cache_experiment.py` (Step 1) with the patched context-length logic.
-2. `benchmarks/batching_comparison-vllm.py` (Step 3) so vLLM generates the intended number of new tokens per prompt.
+To safely move to Phase 4, you only need to re-run:
+1. `benchmarks/batching_comparison-vllm.py` (Step 3)
 
-After reruns, we should be able to produce the Phase 3 graphs/JSON that you can confidently reference in Phase 4 (streaming API + routing).
+After the vLLM rerun outputs refresh, we can move to Phase 4 confidently.
 

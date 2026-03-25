@@ -3,80 +3,80 @@
     "seq_len": 128,
     "use_cache": true,
     "label": "cache_on",
-    "tok_per_sec": 25.68,
-    "ttft_ms": 45.0,
-    "total_ms": 548.2,
-    "new_tokens": 14,
-    "mem_gb": 2.1
+    "tok_per_sec": 32.36,
+    "ttft_ms": 34.9,
+    "total_ms": 1989.9,
+    "new_tokens": 64,
+    "mem_gb": 2.2
   },
   {
     "seq_len": 128,
     "use_cache": false,
     "label": "cache_off",
-    "tok_per_sec": 31.18,
-    "ttft_ms": 38.1,
-    "total_ms": 449.2,
-    "new_tokens": 14,
-    "mem_gb": 2.1
+    "tok_per_sec": 30.57,
+    "ttft_ms": 35.3,
+    "total_ms": 2093.5,
+    "new_tokens": 64,
+    "mem_gb": 2.2
   },
   {
     "seq_len": 256,
     "use_cache": true,
     "label": "cache_on",
-    "tok_per_sec": 34.02,
-    "ttft_ms": 33.3,
-    "total_ms": 411.6,
-    "new_tokens": 14,
-    "mem_gb": 2.1
+    "tok_per_sec": 31.34,
+    "ttft_ms": 42.7,
+    "total_ms": 2080.5,
+    "new_tokens": 64,
+    "mem_gb": 2.22
   },
   {
     "seq_len": 256,
     "use_cache": false,
     "label": "cache_off",
-    "tok_per_sec": 31.13,
-    "ttft_ms": 33.3,
-    "total_ms": 449.9,
-    "new_tokens": 14,
-    "mem_gb": 2.1
+    "tok_per_sec": 17.33,
+    "ttft_ms": 49.1,
+    "total_ms": 3693.3,
+    "new_tokens": 64,
+    "mem_gb": 2.24
   },
   {
     "seq_len": 512,
     "use_cache": true,
     "label": "cache_on",
-    "tok_per_sec": 34.86,
-    "ttft_ms": 34.3,
-    "total_ms": 401.8,
-    "new_tokens": 14,
-    "mem_gb": 2.1
+    "tok_per_sec": 29.78,
+    "ttft_ms": 102.2,
+    "total_ms": 2160.6,
+    "new_tokens": 64,
+    "mem_gb": 2.31
   },
   {
     "seq_len": 512,
     "use_cache": false,
     "label": "cache_off",
-    "tok_per_sec": 31.37,
-    "ttft_ms": 31.8,
-    "total_ms": 446.4,
-    "new_tokens": 14,
-    "mem_gb": 2.1
+    "tok_per_sec": 7.75,
+    "ttft_ms": 113.3,
+    "total_ms": 8264.3,
+    "new_tokens": 64,
+    "mem_gb": 2.68
   },
   {
     "seq_len": 1024,
     "use_cache": true,
     "label": "cache_on",
-    "tok_per_sec": 28.63,
-    "ttft_ms": 43.0,
-    "total_ms": 494.4,
-    "new_tokens": 14,
-    "mem_gb": 2.1
+    "tok_per_sec": 29.12,
+    "ttft_ms": 328.0,
+    "total_ms": 2198.8,
+    "new_tokens": 64,
+    "mem_gb": 2.95
   },
   {
     "seq_len": 1024,
     "use_cache": false,
     "label": "cache_off",
-    "tok_per_sec": 28.72,
-    "ttft_ms": 36.7,
-    "total_ms": 497.2,
-    "new_tokens": 14,
-    "mem_gb": 2.1
+    "tok_per_sec": 2.84,
+    "ttft_ms": 326.3,
+    "total_ms": 22568.5,
+    "new_tokens": 64,
+    "mem_gb": 5.37
   }
 ]

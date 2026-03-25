@@ -103,18 +103,19 @@ def print_header(text):
 # ══════════════════════════════════════════════════════════════════════════════
 #  vLLM BENCHMARK
 # ══════════════════════════════════════════════════════════════════════════════
-def run_vllm_benchmark(llm, batch_sizes, max_new_tokens=MAX_NEW_TOKENS, max_prompt_len=0):
+def run_vllm_benchmark(llm, batch_sizes, max_new_tokens=MAX_NEW_TOKENS, max_prompt_len=0, tokenizer=None):
     """
     vLLM key difference: you submit ALL prompts at once.
     The engine schedules them using continuous batching internally —
     it fills GPU compute slots as individual sequences finish,
     never waiting for the slowest in a batch.
     """
-    # Some vLLM versions interpret SamplingParams.max_tokens as TOTAL tokens
-    # (prompt + generated). In your previous run it generated only ~1 token.
-    # To force "max_new_tokens", we budget: max_tokens = max_prompt_len + max_new_tokens.
+    # vLLM's `SamplingParams.max_tokens` semantics vary by version (some interpret as
+    # total prompt+output tokens). We overshoot with a padding margin so the model
+    # reliably generates the intended length.
+    pad_tokens = 256
     sampling_params = SamplingParams(
-        max_tokens=max_prompt_len + max_new_tokens,
+        max_tokens=max_prompt_len + max_new_tokens + pad_tokens,
         temperature=0,  # greedy = deterministic = fair comparison
     )
     results = {}
@@ -126,7 +127,7 @@ def run_vllm_benchmark(llm, batch_sizes, max_new_tokens=MAX_NEW_TOKENS, max_prom
         # Warmup
         llm.generate(
             get_batch_prompts(1),
-            SamplingParams(max_tokens=max_prompt_len + 10, temperature=0),
+            SamplingParams(max_tokens=max_prompt_len + 10 + pad_tokens, temperature=0),
         )
 
         run_data = []
@@ -135,9 +136,16 @@ def run_vllm_benchmark(llm, batch_sizes, max_new_tokens=MAX_NEW_TOKENS, max_prom
             outputs = llm.generate(prompts, sampling_params)
             wall_time = time.perf_counter() - t0
 
-            total_new_tokens = sum(
-                len(o.outputs[0].token_ids) for o in outputs
-            )
+            # Prefer token counting from generated text to avoid any version-specific
+            # differences in vLLM's internal `token_ids` field.
+            total_new_tokens = 0
+            if tokenizer is None:
+                # fallback to whatever vLLM provides
+                total_new_tokens = sum(len(o.outputs[0].token_ids) for o in outputs)
+            else:
+                for o in outputs:
+                    gen_text = o.outputs[0].text or ""
+                    total_new_tokens += len(tokenizer.encode(gen_text, add_special_tokens=False))
             total_tok_per_sec = total_new_tokens / wall_time if wall_time > 0 else 0
             per_prompt_ms     = (wall_time / bs) * 1000
 
@@ -377,11 +385,11 @@ def main():
     print(f"  Model : {args.model}")
 
     # Compute maximum prompt length so we can set vLLM's max_tokens budget
-    # (prompt + new tokens) and get meaningful generation lengths.
+    # (prompt + new tokens). We use the same tokenizer as token-counting.
     hf_tokenizer = AutoTokenizer.from_pretrained(args.model)
     prompt_lens = [len(hf_tokenizer.encode(p, add_special_tokens=False)) for p in PROMPT_POOL]
     max_prompt_len = max(prompt_lens) if prompt_lens else 0
-    max_model_len = max_prompt_len + args.max_tokens + 16
+    max_model_len = max_prompt_len + args.max_tokens + 512
 
     # ── Load vLLM engine ──────────────────────────────────────────────────────
     print("\n[LOAD] Initialising vLLM engine (this takes ~60s on first run)...")
@@ -395,7 +403,13 @@ def main():
     print("[LOAD] vLLM engine ready.\n")
 
     # ── Run vLLM benchmark ────────────────────────────────────────────────────
-    vllm_results  = run_vllm_benchmark(llm, args.batch_sizes, args.max_tokens, max_prompt_len=max_prompt_len)
+    vllm_results  = run_vllm_benchmark(
+        llm,
+        args.batch_sizes,
+        args.max_tokens,
+        max_prompt_len=max_prompt_len,
+        tokenizer=hf_tokenizer,
+    )
     manual_results = load_manual_results(args.compare_file)
 
     # ── Results ───────────────────────────────────────────────────────────────
