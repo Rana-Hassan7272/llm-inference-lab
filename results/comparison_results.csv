@@ -1,0 +1,4 @@
+mode,mem_gb,ttft_ms,tok_per_sec,quality,n_scored
+FP16,2.1,91.8,31.1,1.5,20
+8-bit,2.09,149.3,8.7,1.55,20
+4-bit,2.09,101.5,15.3,3.1,20

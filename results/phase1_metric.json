@@ -1,4 +1,6 @@
 {
+  "phase": "phase1",
+  "step3_baseline": {
     "model": "TinyLlama-1.1B",
     "precision": "fp16",
     "device": "T4",
@@ -6,4 +8,33 @@
     "tokens_generated": 50,
     "tokens_per_sec": 42,
     "quality_score": 4.5
-  }
+  },
+  "step4_runs": [
+    {
+      "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "device": "cuda",
+      "prompt": "Explain machine learning in simple terms",
+      "max_new_tokens": 50,
+      "inference_time_sec": 1.2175,
+      "timestamp": "2026-03-23"
+    },
+    {
+      "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "device": "cuda",
+      "prompt": "Explain machine learning in simple terms",
+      "max_new_tokens": 50,
+      "inference_time_sec": 0.4914,
+      "timestamp": "2026-03-23",
+      "generated_text": "Explain machine learning in simple terms."
+    },
+    {
+      "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "device": "cuda",
+      "prompt": "Explain machine learning in simple terms",
+      "max_new_tokens": 50,
+      "inference_time_sec": 0.6424,
+      "timestamp": "2026-03-23",
+      "generated_text": "Explain machine learning in simple terms."
+    }
+  ]
+}

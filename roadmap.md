@@ -37,7 +37,6 @@ Record your first numbers manually in a notebook. How long did it take? How much
 Deliverable at end of Phase 1:
 TinyLlama running, generating text, first latency number recorded.
 
-Phase 2 — Quantization Experiments
 Week 2
 Goal: Understand and measure the full quantization tradeoff triangle — speed vs memory vs quality.
 Step 1 — FP16 baseline
@@ -48,7 +47,8 @@ Time to first token
 Tokens per second
 A quality score — run 20 fixed questions, score answers 1-5 manually
 
-This is your baseline. Every other experiment is compared against this.
+This is your baseline. Every other experiment is compared against this.Phase 2 — Quantization Experiments
+
 Step 2 — 8-bit quantization
 Use bitsandbytes to load same model in 8-bit. Run identical 20 questions. Record same metrics. Write honest observations — where did quality drop? Where did it hold?
 Step 3 — 4-bit quantization
