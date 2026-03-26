@@ -1,8 +1,6 @@
-torch
 transformers
 accelerate
 bitsandbytes
-auto-gptq
 fastapi
 uvicorn
 mlflow

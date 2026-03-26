@@ -67,24 +67,25 @@ Efficiency was reported slightly above 100% for larger batches (105–108%). Tha
 
 This step looks production-reasonable and is consistent with the roadmap’s intent.
 
-## vLLM dynamic batching (Step 3) — current comparison is not fair yet
+## vLLM dynamic batching (Step 3) — now aligned and complete
 
-Your `results/vllm/vllm_results.json` still indicates:
-- `total_new_tokens` equals the batch size exactly:
-  - batch 1 → 1 new token
-  - batch 2 → 2 new tokens
-  - batch 4 → 4 new tokens
-  - batch 8 → 8 new tokens
+Your latest `results/vllm/vllm_results.json` now indicates:
+- batch 1: `total_new_tokens=114`, `total_tok_per_sec=106.26`
+- batch 2: `total_new_tokens=228`, `total_tok_per_sec=195.9`
+- batch 4: `total_new_tokens=456`, `total_tok_per_sec=385.91`
+- batch 8: `total_new_tokens=912`, `total_tok_per_sec=750.57`
 
-That means vLLM generation is still not aligned with the manual batching generation length, so Phase 4 is still blocked until vLLM Step 3 is re-run with the updated script.
+This confirms the benchmark is now generating a full token budget per prompt (not collapsing to 1 token), so the comparison against static batching is fair enough for this project.
 
-✅ Fix applied in code (needs rerun output refresh):
-- I patched `benchmarks/batching_comparison-vllm.py` to:
-  - compute generated token counts from generated text (more reliable than vLLM’s internal token_ids field)
-  - increase token budget padding so generation doesn’t truncate to ~1 token
+Comparison summary (manual vs vLLM tok/sec from your latest run):
+- Batch 1: `30.31` vs `106.26`  → `3.51×`
+- Batch 2: `60.58` vs `195.90`  → `3.23×`
+- Batch 4: `127.77` vs `385.91` → `3.02×`
+- Batch 8: `262.59` vs `750.57` → `2.86×`
 
-Required rerun:
-- Re-run vLLM Step 3 on Colab GPU to regenerate `results/vllm/*`.
+Interpretation:
+- vLLM consistently outperforms manual static batching on this workload.
+- Relative speedup decreases slightly at larger batches (typical as manual batching already utilizes GPU better at high batch sizes).
 
 ## Adaptive router (Step 4) — working, minor tier expectation mismatch
 
@@ -100,12 +101,13 @@ This is acceptable as an MVP, but for “interview impressiveness” you can lat
 
 ## Can we move to Phase 4 now?
 
-Not yet.
+Yes.
 
-Phase 3 is functionally done except **vLLM Step 3 is still not aligned** (it’s still producing ~1 token per prompt in the metrics).
+Phase 3 deliverables are now complete:
+1. KV cache graphs and JSON are correct.
+2. Static batching comparison and plots are complete.
+3. vLLM dynamic batching comparison is now aligned and saved.
+4. Adaptive router is working with logged decisions.
 
-To safely move to Phase 4, you only need to re-run:
-1. `benchmarks/batching_comparison-vllm.py` (Step 3)
-
-After the vLLM rerun outputs refresh, we can move to Phase 4 confidently.
+You can confidently move to Phase 4 (Streaming API).
 

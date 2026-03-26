@@ -1,34 +1,34 @@
 [
   {
     "batch_size": 1,
-    "total_tok_per_sec": 38.18,
-    "per_prompt_ms": 26.2,
-    "wall_time_ms": 26.2,
-    "total_new_tokens": 1,
+    "total_tok_per_sec": 106.26,
+    "per_prompt_ms": 1072.8,
+    "wall_time_ms": 1072.8,
+    "total_new_tokens": 114,
     "engine": "vllm"
   },
   {
     "batch_size": 2,
-    "total_tok_per_sec": 69.04,
-    "per_prompt_ms": 14.5,
-    "wall_time_ms": 29.0,
-    "total_new_tokens": 2,
+    "total_tok_per_sec": 195.9,
+    "per_prompt_ms": 581.9,
+    "wall_time_ms": 1163.8,
+    "total_new_tokens": 228,
     "engine": "vllm"
   },
   {
     "batch_size": 4,
-    "total_tok_per_sec": 123.56,
-    "per_prompt_ms": 9.9,
-    "wall_time_ms": 39.7,
-    "total_new_tokens": 4,
+    "total_tok_per_sec": 385.91,
+    "per_prompt_ms": 295.4,
+    "wall_time_ms": 1181.7,
+    "total_new_tokens": 456,
     "engine": "vllm"
   },
   {
     "batch_size": 8,
-    "total_tok_per_sec": 237.21,
-    "per_prompt_ms": 4.4,
-    "wall_time_ms": 35.2,
-    "total_new_tokens": 8,
+    "total_tok_per_sec": 750.57,
+    "per_prompt_ms": 151.9,
+    "wall_time_ms": 1215.1,
+    "total_new_tokens": 912,
     "engine": "vllm"
   }
 ]
