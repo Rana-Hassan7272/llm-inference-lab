@@ -32,6 +32,18 @@ Thumbs.db
 results/*.log
 results/*.tmp
 api/*.log
+results/*_results.json.bak
+results/benchmark_run_*.json
+results/load-testing/
+results/router/
+results/routing_log.jsonl
+results/vllm/*.png
+
+# Local tracking and UI build artifacts
+mlruns/
+dashboard/node_modules/
+dashboard/dist/
+dashboard/public/data/dashboard_bundle.json
 
 # Keep local downloaded model weights out of git
 models/*
