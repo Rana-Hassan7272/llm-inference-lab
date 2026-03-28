@@ -45,6 +45,18 @@ function App() {
         let data = {};
         if (baseRes.ok) {
           data = await baseRes.json();
+          // Normalize numeric types in latencyRows from bundled JSON (in case of stringified numbers)
+          if (Array.isArray(data.latencyRows)) {
+            data.latencyRows = data.latencyRows.map((row) => ({
+              users: Number(row.users),
+              generate_avg_ms: Number(row.generate_avg_ms),
+              generate_p95_ms: Number(row.generate_p95_ms),
+              generate_rps: Number(row.generate_rps),
+              generate_fail_ratio:
+                row.generate_fail_ratio == null ? null : Number(row.generate_fail_ratio),
+              total_rps: Number(row.total_rps)
+            }));
+          }
         }
 
         // Optional: augment from API for routing log
