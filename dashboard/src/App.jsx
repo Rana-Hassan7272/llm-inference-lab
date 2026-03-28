@@ -69,33 +69,59 @@ function App() {
         const latencyUrl = import.meta.env.VITE_LATENCY_JSON_URL || "";
         const hasLatency =
           Array.isArray(data.latencyRows) && data.latencyRows.length > 0;
-        if (!hasLatency && latencyUrl) {
+        const tryLoadLatencyFrom = async (url) => {
           try {
-            const l = await fetch(latencyUrl, { mode: "cors" });
-            if (l.ok) {
-              const summary = await l.json();
-              // Accept either {results: [...]} (runner summary) or direct array
-              const rowsSrc = Array.isArray(summary)
-                ? summary
-                : Array.isArray(summary?.results)
-                ? summary.results
-                : [];
-              const latencyRows = rowsSrc
-                .map((row) => ({
-                  users: row.users,
-                  generate_avg_ms: row.generate_avg_ms,
-                  generate_p95_ms: row.generate_p95_ms,
-                  generate_rps: row.generate_rps,
-                  generate_fail_ratio: row.generate_fail_ratio,
-                  total_rps: row.total_rps
-                }))
-                .filter((r) => r.users != null);
-              if (latencyRows.length) {
-                data.latencyRows = latencyRows;
-              }
+            const l = await fetch(url, { mode: "cors" });
+            if (!l.ok) return false;
+            const summary = await l.json();
+            const rowsSrc = Array.isArray(summary)
+              ? summary
+              : Array.isArray(summary?.results)
+              ? summary.results
+              : [];
+            const latencyRows = rowsSrc
+              .map((row) => ({
+                users: Number(row.users),
+                generate_avg_ms: Number(row.generate_avg_ms),
+                generate_p95_ms: Number(row.generate_p95_ms),
+                generate_rps: Number(row.generate_rps),
+                generate_fail_ratio:
+                  row.generate_fail_ratio == null ? null : Number(row.generate_fail_ratio),
+                total_rps: Number(row.total_rps)
+              }))
+              .filter((r) => r.users != null && !Number.isNaN(r.users));
+            if (latencyRows.length) {
+              data.latencyRows = latencyRows;
+              return true;
             }
-          } catch (_) {
-            // ignore
+            return false;
+          } catch {
+            return false;
+          }
+        };
+
+        if (!hasLatency) {
+          // Priority 1: explicit URL from env
+          if (latencyUrl) {
+            const ok = await tryLoadLatencyFrom(latencyUrl);
+            if (!ok) {
+              // fall through to public paths
+            }
+          }
+          // Priority 2: common public paths (committed artifacts)
+          if (!Array.isArray(data.latencyRows) || data.latencyRows.length === 0) {
+            // e.g., dashboard/public/data/load_test_summary.json
+            const candidates = [
+              "/data/load_test_summary.json",
+              "/data/latest/load_test_summary.json",
+              "/data/latest.json"
+            ];
+            for (const url of candidates) {
+              // stop at first success
+              // eslint-disable-next-line no-await-in-loop
+              const ok = await tryLoadLatencyFrom(url);
+              if (ok) break;
+            }
           }
         }
 
