@@ -40,103 +40,9 @@ function App() {
     let cancelled = false;
     const load = async () => {
       try {
-        // Base static bundle (committed artifacts)
-        const baseRes = await fetch(`/data/dashboard_bundle.json?ts=${Date.now()}`);
-        let data = {};
-        if (baseRes.ok) {
-          data = await baseRes.json();
-          // Normalize numeric types in latencyRows from bundled JSON (in case of stringified numbers)
-          if (Array.isArray(data.latencyRows)) {
-            data.latencyRows = data.latencyRows.map((row) => ({
-              users: Number(row.users),
-              generate_avg_ms: Number(row.generate_avg_ms),
-              generate_p95_ms: Number(row.generate_p95_ms),
-              generate_rps: Number(row.generate_rps),
-              generate_fail_ratio:
-                row.generate_fail_ratio == null ? null : Number(row.generate_fail_ratio),
-              total_rps: Number(row.total_rps)
-            }));
-          }
-        }
-
-        // Optional: augment from API for routing log
-        const apiBase = import.meta.env.VITE_API_BASE || "";
-        if (apiBase) {
-          try {
-            const r = await fetch(`${apiBase.replace(/\/$/, "")}/routing-log?last_n=100`, { mode: "cors" });
-            if (r.ok) {
-              const payload = await r.json();
-              const routingRows =
-                Array.isArray(payload) ? payload :
-                Array.isArray(payload?.entries) ? payload.entries :
-                [];
-              data.routingRows = routingRows;
-            }
-          } catch (_) {
-            // ignore network/CORS errors silently
-          }
-        }
-
-        // Optional: latency from external JSON (e.g., latest load_test_summary.json)
-        const latencyUrl = import.meta.env.VITE_LATENCY_JSON_URL || "";
-        const hasLatency =
-          Array.isArray(data.latencyRows) && data.latencyRows.length > 0;
-        const tryLoadLatencyFrom = async (url) => {
-          try {
-            const l = await fetch(url, { mode: "cors" });
-            if (!l.ok) return false;
-            const summary = await l.json();
-            const rowsSrc = Array.isArray(summary)
-              ? summary
-              : Array.isArray(summary?.results)
-              ? summary.results
-              : [];
-            const latencyRows = rowsSrc
-              .map((row) => ({
-                users: Number(row.users),
-                generate_avg_ms: Number(row.generate_avg_ms),
-                generate_p95_ms: Number(row.generate_p95_ms),
-                generate_rps: Number(row.generate_rps),
-                generate_fail_ratio:
-                  row.generate_fail_ratio == null ? null : Number(row.generate_fail_ratio),
-                total_rps: Number(row.total_rps)
-              }))
-              .filter((r) => r.users != null && !Number.isNaN(r.users));
-            if (latencyRows.length) {
-              data.latencyRows = latencyRows;
-              return true;
-            }
-            return false;
-          } catch {
-            return false;
-          }
-        };
-
-        if (!hasLatency) {
-          // Priority 1: explicit URL from env
-          if (latencyUrl) {
-            const ok = await tryLoadLatencyFrom(latencyUrl);
-            if (!ok) {
-              // fall through to public paths
-            }
-          }
-          // Priority 2: common public paths (committed artifacts)
-          if (!Array.isArray(data.latencyRows) || data.latencyRows.length === 0) {
-            // e.g., dashboard/public/data/load_test_summary.json
-            const candidates = [
-              "/data/load_test_summary.json",
-              "/data/latest/load_test_summary.json",
-              "/data/latest.json"
-            ];
-            for (const url of candidates) {
-              // stop at first success
-              // eslint-disable-next-line no-await-in-loop
-              const ok = await tryLoadLatencyFrom(url);
-              if (ok) break;
-            }
-          }
-        }
-
+        const res = await fetch(`/data/dashboard_bundle.json?ts=${Date.now()}`);
+        if (!res.ok) throw new Error(`Failed to load dashboard data (${res.status})`);
+        const data = await res.json();
         if (!cancelled) {
           setBundle(data);
           setError("");
@@ -221,20 +127,17 @@ function App() {
           </div>
         </Card>
 
-        <Card title="Latency & Throughput by Users">
+        <Card title="Latency Distribution Chart">
           <div className="chart-wrap">
             <ResponsiveContainer width="100%" height={320}>
               <LineChart data={latencyRows} margin={{ top: 16, right: 16, bottom: 16, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="users" />
-                <YAxis yAxisId="left" />
-                <YAxis yAxisId="right" orientation="right" />
+                <YAxis />
                 <Tooltip />
                 <Legend />
-                <Line yAxisId="left" type="monotone" dataKey="generate_avg_ms" name="Avg Latency (ms)" stroke="#27ae60" strokeWidth={2} />
-                <Line yAxisId="left" type="monotone" dataKey="generate_p95_ms" name="P95 Latency (ms)" stroke="#eb5757" strokeWidth={2} />
-                <Line yAxisId="right" type="monotone" dataKey="generate_rps" name="Throughput (req/s)" stroke="#2f80ed" strokeWidth={2} />
-                <Line yAxisId="right" type="monotone" dataKey="generate_fail_ratio" name="Fail Ratio" stroke="#9b51e0" strokeWidth={2} dot />
+                <Line type="monotone" dataKey="generate_avg_ms" name="Avg Latency (ms)" stroke="#27ae60" strokeWidth={2} />
+                <Line type="monotone" dataKey="generate_p95_ms" name="P95 Latency (ms)" stroke="#eb5757" strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
           </div>
