@@ -18,6 +18,15 @@ A production‑minded journey from single‑GPU experiments to a deployable LLM 
 - Production deploys: API (Docker → Render), Dashboard (Vercel)
 
 
+## Live Dashboard Snapshots
+
+These screenshots showcase the deployed dashboard (comparison table, scatter, latency/throughput, routing log).
+
+![Dashboard Overview 1](results/Screenshot%20(1907).png)
+
+![Dashboard Overview 2](results/Screenshot%20(1908).png)
+
+
 ## Repo Structure
 
 ```
@@ -71,6 +80,15 @@ Source of truth: `results/phase3_findings.md`
 - Findings (example from latest run):
   - Speedup grows with context: ~1.06× @128, 1.81× @256, 3.84× @512, 10.25× @1024
 
+Inline snapshot (tok/s and speedup):
+
+| Context (tokens) | Cache ON tok/s | Cache OFF tok/s | Speedup |
+|-----------------:|---------------:|----------------:|--------:|
+| 128              | 32.36          | 30.57           | 1.06×   |
+| 256              | 31.34          | 17.33           | 1.81×   |
+| 512              | 29.78          | 7.75            | 3.84×   |
+| 1024             | 29.12          | 2.84            | 10.25×  |
+
 ### Static Batching (Step 2)
 - Experiment: `optimization/batching.py`
 - Artifacts:
@@ -78,6 +96,15 @@ Source of truth: `results/phase3_findings.md`
   - `.../batching_throughput.png`, `.../batching_latency.png`, `.../batching_efficiency.png`
 - Findings (from latest run):
   - Near‑linear throughput scaling; total tok/s: 30.31 → 60.58 → 127.77 → 262.59 (batch 1→8)
+
+Inline snapshot (manual batching total throughput):
+
+| Batch size | Total tok/s |
+|-----------:|------------:|
+| 1          | 30.31       |
+| 2          | 60.58       |
+| 4          | 127.77      |
+| 8          | 262.59      |
 
 ### vLLM Dynamic Batching (Step 3)
 - Experiment: `benchmarks/batching_comparison-vllm.py`
@@ -92,6 +119,15 @@ Source of truth: `results/phase3_findings.md`
   - Speedups vs manual batching on total tok/s:
     - Batch 1: 106.26 vs 30.31 → 3.5×
     - Batch 8: 750.57 vs 262.59 → 2.86×
+
+Inline snapshot (vLLM total throughput):
+
+| Batch size | vLLM total tok/s | Manual total tok/s | Speedup |
+|-----------:|------------------:|-------------------:|--------:|
+| 1          | 106.26           | 30.31              | 3.51×   |
+| 2          | 195.90           | 60.58              | 3.23×   |
+| 4          | 385.91           | 127.77             | 3.02×   |
+| 8          | 750.57           | 262.59             | 2.86×   |
 
 ### Adaptive Router (Step 4)
 - Module: `inference/adaptive_router.py`
@@ -113,6 +149,21 @@ Key files:
 - `api/app.py`, `inference/model_manager.py`
 
 Confirmed on GPU (Colab T4) and CPU (with FP16 fallback). See `results/phase4_findings.md` for detailed notes and caveats.
+
+Inline example — blocking generation (GPU, T4):
+
+- Prompt: `To be, or not to be,`
+- Params: `max_new_tokens=64`, `temperature=0.8`, `top_p=0.9`, `top_k=40`
+- Observed: `total_time≈4.134 s`, `tokens=64`, `TPS≈15.48/s`, `mem≈1.94 GB`
+- Route/tier: as decided by router (or `force_tier`)
+
+Inline example — streaming (SSE):
+
+- First event includes routing metadata, then token chunks:
+  - data: {"routing": {...}}
+  - data: {"token": "Hello"}
+  - ...
+  - data: {"done": true, "tok_per_sec": 0.3, "total_ms": 10063.7, "token_count": 3, "mem_gb": 0.0}
 
 
 ## Phase 5 — Automation, Load Testing, Tracking, Dashboard
@@ -136,6 +187,17 @@ Confirmed on GPU (Colab T4) and CPU (with FP16 fallback). See `results/phase4_fi
   - `dashboard/src/App.jsx`
   - Loads `public/data/dashboard_bundle.json` and `load_test_summary.json` (or `VITE_LATENCY_JSON_URL`)
   - Visuals: comparison table; memory‑vs‑quality scatter; latency/throughput dual‑axis; routing log
+
+Inline load‑test table (from `run_20260327_164725`):
+
+| Users | Requests/s | Avg (ms) | P95 (ms) | Fail ratio |
+|------:|-----------:|---------:|---------:|-----------:|
+|     1 |       1.16 |   272.82 |      330 |       0.00 |
+|     5 |       4.27 |   495.25 |      910 |       0.00 |
+|    10 |       4.61 |  1258.01 |     2000 |       0.00 |
+|    20 |       4.61 |  2931.82 |     3800 |       0.00 |
+
+Dashboard (Vercel): it auto‑loads the committed `dashboard_bundle.json` and, if present, `load_test_summary.json` to render latency/throughput charts and KPIs.
 
 
 ## Phase 6 — Docker & Deployment
