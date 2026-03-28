@@ -40,9 +40,61 @@ function App() {
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await fetch(`/data/dashboard_bundle.json?ts=${Date.now()}`);
-        if (!res.ok) throw new Error(`Failed to load dashboard data (${res.status})`);
-        const data = await res.json();
+        // Base static bundle (committed artifacts)
+        const baseRes = await fetch(`/data/dashboard_bundle.json?ts=${Date.now()}`);
+        let data = {};
+        if (baseRes.ok) {
+          data = await baseRes.json();
+        }
+
+        // Optional: augment from API for routing log
+        const apiBase = import.meta.env.VITE_API_BASE || "";
+        if (apiBase) {
+          try {
+            const r = await fetch(`${apiBase.replace(/\/$/, "")}/routing-log?last_n=100`, { mode: "cors" });
+            if (r.ok) {
+              const routingRows = await r.json();
+              data.routingRows = routingRows;
+            }
+          } catch (_) {
+            // ignore network/CORS errors silently
+          }
+        }
+
+        // Optional: latency from external JSON (e.g., latest load_test_summary.json)
+        const latencyUrl = import.meta.env.VITE_LATENCY_JSON_URL || "";
+        const hasLatency =
+          Array.isArray(data.latencyRows) && data.latencyRows.length > 0;
+        if (!hasLatency && latencyUrl) {
+          try {
+            const l = await fetch(latencyUrl, { mode: "cors" });
+            if (l.ok) {
+              const summary = await l.json();
+              // Accept either {results: [...]} (runner summary) or direct array
+              const rowsSrc = Array.isArray(summary)
+                ? summary
+                : Array.isArray(summary?.results)
+                ? summary.results
+                : [];
+              const latencyRows = rowsSrc
+                .map((row) => ({
+                  users: row.users,
+                  generate_avg_ms: row.generate_avg_ms,
+                  generate_p95_ms: row.generate_p95_ms,
+                  generate_rps: row.generate_rps,
+                  generate_fail_ratio: row.generate_fail_ratio,
+                  total_rps: row.total_rps
+                }))
+                .filter((r) => r.users != null);
+              if (latencyRows.length) {
+                data.latencyRows = latencyRows;
+              }
+            }
+          } catch (_) {
+            // ignore
+          }
+        }
+
         if (!cancelled) {
           setBundle(data);
           setError("");
@@ -127,17 +179,20 @@ function App() {
           </div>
         </Card>
 
-        <Card title="Latency Distribution Chart">
+        <Card title="Latency & Throughput by Users">
           <div className="chart-wrap">
             <ResponsiveContainer width="100%" height={320}>
               <LineChart data={latencyRows} margin={{ top: 16, right: 16, bottom: 16, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="users" />
-                <YAxis />
+                <YAxis yAxisId="left" />
+                <YAxis yAxisId="right" orientation="right" />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="generate_avg_ms" name="Avg Latency (ms)" stroke="#27ae60" strokeWidth={2} />
-                <Line type="monotone" dataKey="generate_p95_ms" name="P95 Latency (ms)" stroke="#eb5757" strokeWidth={2} />
+                <Line yAxisId="left" type="monotone" dataKey="generate_avg_ms" name="Avg Latency (ms)" stroke="#27ae60" strokeWidth={2} />
+                <Line yAxisId="left" type="monotone" dataKey="generate_p95_ms" name="P95 Latency (ms)" stroke="#eb5757" strokeWidth={2} />
+                <Line yAxisId="right" type="monotone" dataKey="generate_rps" name="Throughput (req/s)" stroke="#2f80ed" strokeWidth={2} />
+                <Line yAxisId="right" type="monotone" dataKey="generate_fail_ratio" name="Fail Ratio" stroke="#9b51e0" strokeWidth={2} dot />
               </LineChart>
             </ResponsiveContainer>
           </div>
