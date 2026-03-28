@@ -1,0 +1,5 @@
+users,status,generate_rps,generate_avg_ms,generate_p95_ms,generate_fail_ratio,total_rps
+1,failed,,,,,
+5,failed,,,,,
+10,failed,,,,,
+20,failed,,,,,

@@ -1,0 +1,42 @@
+{
+  "timestamp_utc": "2026-03-28T17:18:05.164643+00:00",
+  "host": "https://llm-inference-lab.onrender.com/",
+  "duration": "180s",
+  "spawn_rate": 1.0,
+  "users": [
+    1,
+    5,
+    10,
+    20
+  ],
+  "results": [
+    {
+      "users": 1,
+      "status": "failed",
+      "error": "/usr/bin/python3: No module named locust\n",
+      "stats_csv": "/content/llm-inference-lab/results/load-testing/run_20260328_171805/users_1_stats.csv",
+      "failures_csv": "/content/llm-inference-lab/results/load-testing/run_20260328_171805/users_1_failures.csv"
+    },
+    {
+      "users": 5,
+      "status": "failed",
+      "error": "/usr/bin/python3: No module named locust\n",
+      "stats_csv": "/content/llm-inference-lab/results/load-testing/run_20260328_171805/users_5_stats.csv",
+      "failures_csv": "/content/llm-inference-lab/results/load-testing/run_20260328_171805/users_5_failures.csv"
+    },
+    {
+      "users": 10,
+      "status": "failed",
+      "error": "/usr/bin/python3: No module named locust\n",
+      "stats_csv": "/content/llm-inference-lab/results/load-testing/run_20260328_171805/users_10_stats.csv",
+      "failures_csv": "/content/llm-inference-lab/results/load-testing/run_20260328_171805/users_10_failures.csv"
+    },
+    {
+      "users": 20,
+      "status": "failed",
+      "error": "/usr/bin/python3: No module named locust\n",
+      "stats_csv": "/content/llm-inference-lab/results/load-testing/run_20260328_171805/users_20_stats.csv",
+      "failures_csv": "/content/llm-inference-lab/results/load-testing/run_20260328_171805/users_20_failures.csv"
+    }
+  ]
+}
