@@ -43,7 +43,7 @@ results/vllm/*.png
 mlruns/
 dashboard/node_modules/
 dashboard/dist/
-dashboard/public/data/dashboard_bundle.json
+
 
 # Keep local downloaded model weights out of git
 models/*
