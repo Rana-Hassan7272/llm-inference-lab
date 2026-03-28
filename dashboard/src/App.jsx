@@ -53,7 +53,11 @@ function App() {
           try {
             const r = await fetch(`${apiBase.replace(/\/$/, "")}/routing-log?last_n=100`, { mode: "cors" });
             if (r.ok) {
-              const routingRows = await r.json();
+              const payload = await r.json();
+              const routingRows =
+                Array.isArray(payload) ? payload :
+                Array.isArray(payload?.entries) ? payload.entries :
+                [];
               data.routingRows = routingRows;
             }
           } catch (_) {
