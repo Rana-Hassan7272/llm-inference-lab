@@ -424,6 +424,24 @@ Full quality/latency notes: [`results/phase4_findings.md`](results/phase4_findin
 
 ---
 
+### Ablation — Precision vs VRAM, TTFT, TPS, Quality
+
+Aggregated over the 20-question set in `results/*_results.json` (TinyLlama-1.1B on Tesla T4). TTFT is mean time-to-first-token; TPS is mean tokens/sec; Quality is the mean of the 1–5 manual scores captured in the scored JSONs.
+
+| Tier | VRAM (GB) | Avg TTFT (ms) | Avg TPS (tok/s) | Avg Quality (1–5) |
+|---|---:|---:|---:|---:|
+| 4-bit (fast) | 2.19 | 74 | 14.3 | 3.10 |
+| 8-bit (balanced) | 2.16 | 150 | 7.1 | 1.55 |
+| FP16 (quality) | 2.16 | 103 | 26.7 | 1.50 |
+
+Notes:
+- These are dataset averages; FP16 TTFT includes an initial warm-up outlier on the first prompt, which increases the mean.
+- Quality scores come from manual 1–5 ratings merged into the canonical files (see `benchmarks/merge_scored_results.py`). They are indicative rather than a formal BLEU/perplexity evaluation.
+
+If you want a stricter metric (BLEU/perplexity) on a fixed test set, we can add an automatic scorer and re-run to populate the "Quality" column with objective scores.
+
+---
+
 ## Technology Stack
 
 | Layer | Technology |
