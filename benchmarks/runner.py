@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -61,6 +62,12 @@ QUANT_QUESTIONS = [
 ]
 
 
+CONTROL_TOKEN_RE = re.compile(
+    r"(\[/?(?:INST|USER|SYSTEM|ASSISTANT|SPEAKER|SQ|SURVEY|HEADER|BOTTOM|BUTTONS|CALL-TO-ACTION|CONTACT-INFO|CONTACT-ME|SCH)\])",
+    flags=re.IGNORECASE,
+)
+
+
 @dataclass
 class StageResult:
     name: str
@@ -104,7 +111,11 @@ def _resolve_model_arg(model_arg: str) -> str:
 
 
 def _load_quantized_model(model_id: str, mode: str):
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_id,
+        cache_dir=str(ROOT / ".hf_cache"),
+        local_files_only=False,
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     kwargs: dict[str, Any] = {"low_cpu_mem_usage": True}
@@ -128,7 +139,12 @@ def _load_quantized_model(model_id: str, mode: str):
                 bnb_4bit_compute_dtype=torch.float16,
             )
 
-    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        cache_dir=str(ROOT / ".hf_cache"),
+        local_files_only=False,
+        **kwargs,
+    )
     # Avoid noisy warning: when both generation_config.max_length and max_new_tokens exist,
     # Transformers warns that max_new_tokens takes precedence.
     try:
@@ -142,11 +158,59 @@ def _load_quantized_model(model_id: str, mode: str):
     return tokenizer, model
 
 
+def _format_prompt(tokenizer, question: str, device: str) -> dict[str, torch.Tensor]:
+    """
+    Build inputs with chat template when available, else fallback to plain text.
+    This reduces prompt-format mismatch artifacts in benchmark outputs.
+    """
+    text_prompt = f"Question: {question}\nAnswer:"
+    if hasattr(tokenizer, "apply_chat_template"):
+        try:
+            messages = [{"role": "user", "content": question}]
+            templated = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            if isinstance(templated, str) and templated.strip():
+                text_prompt = templated
+        except Exception:
+            pass
+
+    inputs = tokenizer(
+        text_prompt,
+        return_tensors="pt",
+        truncation=True,
+        max_length=512,
+    )
+    return {k: v.to(device) for k, v in inputs.items()}
+
+
+def _clean_answer(answer: str) -> str:
+    text = (answer or "").strip()
+    text = CONTROL_TOKEN_RE.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    # Remove common echoed prefixes.
+    for prefix in ("Answer:", "answer:", "Assistant:", "assistant:"):
+        if text.startswith(prefix):
+            text = text[len(prefix):].strip()
+            break
+
+    # Keep first sentence-ish chunk to reduce repeated loops from tiny models.
+    parts = re.split(r"(?:\.\s+|\?\s+|\!\s+|\n+)", text)
+    if parts and len(parts[0].strip()) >= 8:
+        text = parts[0].strip()
+
+    return text
+
+
 def run_quantization_benchmark(
     model_id: str,
     mode: str,
     max_new_tokens: int,
     out_file: Path,
+    question_limit: int | None = None,
 ) -> StageResult:
     start = time.perf_counter()
     mode_label = {"fp16": "FP16", "8bit": "8-bit", "4bit": "4-bit"}[mode]
@@ -175,14 +239,9 @@ def run_quantization_benchmark(
 
     records: list[dict[str, Any]] = []
 
-    for idx, question in enumerate(QUANT_QUESTIONS, start=1):
-        inputs = tokenizer(
-            question,
-            return_tensors="pt",
-            truncation=True,
-            max_length=512,
-        )
-        inputs = {k: v.to(device) for k, v in inputs.items()}
+    questions = QUANT_QUESTIONS[:question_limit] if question_limit else QUANT_QUESTIONS
+    for idx, question in enumerate(questions, start=1):
+        inputs = _format_prompt(tokenizer, question, str(device))
         in_len = inputs["input_ids"].shape[1]
 
         if torch.cuda.is_available():
@@ -208,7 +267,10 @@ def run_quantization_benchmark(
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
+                eos_token_id=tokenizer.eos_token_id,
                 use_cache=True,
+                repetition_penalty=1.1,
+                no_repeat_ngram_size=3,
             )
         if torch.cuda.is_available():
             torch.cuda.synchronize()
@@ -216,7 +278,8 @@ def run_quantization_benchmark(
 
         new_tokens = max(output.shape[1] - in_len, 1)
         tok_per_sec = new_tokens / (total_ms / 1000) if total_ms > 0 else 0.0
-        answer = tokenizer.decode(output[0][in_len:], skip_special_tokens=True).strip()
+        answer_raw = tokenizer.decode(output[0][in_len:], skip_special_tokens=True).strip()
+        answer = _clean_answer(answer_raw)
 
         records.append(
             {
@@ -309,6 +372,12 @@ def main() -> int:
         help="Comma-separated quantization modes: fp16,8bit,4bit",
     )
     parser.add_argument("--max-new-tokens", type=int, default=DEFAULT_MAX_NEW_TOKENS)
+    parser.add_argument(
+        "--question-limit",
+        type=int,
+        default=0,
+        help="Run only first N benchmark questions (0 = all 20).",
+    )
     parser.add_argument("--skip-kv-cache", action="store_true")
     parser.add_argument("--skip-batching", action="store_true")
     parser.add_argument("--skip-vllm", action="store_true")
@@ -347,6 +416,7 @@ def main() -> int:
             mode=mode,
             max_new_tokens=args.max_new_tokens,
             out_file=RESULTS_DIR / filename,
+            question_limit=(args.question_limit if args.question_limit > 0 else None),
         )
         run_manifest["stages"].append(asdict(stage))
         if stage.status != "ok":

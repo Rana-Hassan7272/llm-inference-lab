@@ -163,6 +163,7 @@ Write `docker-compose.yml` with three services:
 api        — FastAPI inference server
 mlflow     — experiment tracking UI
 dashboard  — React benchmark dashboard
+or any other what we made you think good to add add that
 ```
 
 One command: `docker-compose up` — everything starts.

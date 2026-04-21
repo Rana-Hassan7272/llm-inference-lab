@@ -49,11 +49,13 @@ import os
 import sys
 import json
 import time
+import asyncio
 import logging
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncIterator, Optional
+from contextlib import suppress
 
 import torch
 import uvicorn
@@ -87,6 +89,8 @@ MODEL_ID         = os.getenv("MODEL_ID", "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 MAX_LOADED_TIERS = int(os.getenv("MAX_LOADED_TIERS", "3"))   # 1 for large models
 LOG_DIR          = Path(os.getenv("LOG_DIR", "results"))
 ROUTING_LOG_PATH = LOG_DIR / "routing_log.jsonl"             # JSONL: one entry per line
+MAX_QUEUE_WAIT_MS = int(os.getenv("MAX_QUEUE_WAIT_MS", "2500"))
+MAX_CONCURRENT_PER_TIER = int(os.getenv("MAX_CONCURRENT_PER_TIER", "1"))
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -116,6 +120,11 @@ app.add_middleware(
 # ══════════════════════════════════════════════════════════════════════════════
 
 manager = ModelManager(model_id=MODEL_ID, max_loaded_tiers=MAX_LOADED_TIERS)
+tier_semaphores = {
+    "fast": asyncio.Semaphore(MAX_CONCURRENT_PER_TIER),
+    "balanced": asyncio.Semaphore(MAX_CONCURRENT_PER_TIER),
+    "quality": asyncio.Semaphore(MAX_CONCURRENT_PER_TIER),
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  REQUEST / RESPONSE SCHEMAS
@@ -251,6 +260,35 @@ def _build_log_entry(
     }
 
 
+async def acquire_tier_slot(tier: str) -> callable:
+    """
+    Backpressure control: bound per-tier queue wait time.
+    Prevents unbounded latency growth at high concurrency.
+    """
+    sem = tier_semaphores[tier]
+    wait_s = max(MAX_QUEUE_WAIT_MS, 1) / 1000.0
+    try:
+        await asyncio.wait_for(sem.acquire(), timeout=wait_s)
+    except TimeoutError:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Tier '{tier}' is saturated. "
+                f"Try again shortly or force a different tier."
+            ),
+        )
+
+    released = False
+
+    def _release() -> None:
+        nonlocal released
+        if not released:
+            sem.release()
+            released = True
+
+    return _release
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  ENDPOINT 1 — POST /generate  (blocking)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -276,69 +314,74 @@ async def generate(req: GenerateRequest):
         decision.reason    = f"Forced by caller to {req.force_tier} tier"
 
     logger.info("POST /generate | tier=%s | prompt=%.60s...", decision.tier, req.prompt)
+    release_slot = await acquire_tier_slot(decision.tier)
 
     # ── Load model + tokenize ─────────────────────────────────────────────────
     try:
-        model, tokenizer = manager.get(decision.tier)
-    except Exception as e:
-        logger.error("Model load failed: %s", e)
-        raise HTTPException(status_code=503, detail=f"Model load failed: {e}")
+        # ── Load model + tokenize ─────────────────────────────────────────────
+        try:
+            model, tokenizer = manager.get(decision.tier)
+        except Exception as e:
+            logger.error("Model load failed: %s", e)
+            raise HTTPException(status_code=503, detail=f"Model load failed: {e}")
 
-    device  = next(model.parameters()).device
-    inputs, in_len = _prepare_inputs(req.prompt, tokenizer, str(device))
+        device  = next(model.parameters()).device
+        inputs, in_len = _prepare_inputs(req.prompt, tokenizer, str(device))
 
-    # ── Time to first token ───────────────────────────────────────────────────
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    t_ttft = time.perf_counter()
-
-    with manager.get_lock(decision.tier):
-        with torch.no_grad():
-            _ = model.generate(
-                **inputs, max_new_tokens=1,
-                do_sample=False, pad_token_id=tokenizer.eos_token_id
-            )
+        # ── Time to first token ───────────────────────────────────────────────
         if torch.cuda.is_available():
             torch.cuda.synchronize()
-        ttft_ms = (time.perf_counter() - t_ttft) * 1000
+        t_ttft = time.perf_counter()
 
-        # ── Full generation ───────────────────────────────────────────────────
-        t0 = time.perf_counter()
-        kwargs = _make_generate_kwargs(inputs, req.max_tokens, req.temperature, tokenizer)
-        with torch.no_grad():
-            output = model.generate(**kwargs)
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-        total_ms = (time.perf_counter() - t0) * 1000
+        with manager.get_lock(decision.tier):
+            with torch.no_grad():
+                _ = model.generate(
+                    **inputs, max_new_tokens=1,
+                    do_sample=False, pad_token_id=tokenizer.eos_token_id
+                )
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            ttft_ms = (time.perf_counter() - t_ttft) * 1000
 
-    new_tokens  = output.shape[1] - in_len
-    tok_per_sec = new_tokens / (total_ms / 1000) if total_ms > 0 else 0
-    text        = tokenizer.decode(output[0][in_len:], skip_special_tokens=True).strip()
-    mem_gb      = ModelManager._vram_used_gb()
+            # ── Full generation ───────────────────────────────────────────────
+            t0 = time.perf_counter()
+            kwargs = _make_generate_kwargs(inputs, req.max_tokens, req.temperature, tokenizer)
+            with torch.no_grad():
+                output = model.generate(**kwargs)
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            total_ms = (time.perf_counter() - t0) * 1000
 
-    # ── Log ───────────────────────────────────────────────────────────────────
-    append_routing_log(_build_log_entry(
-        req.prompt, decision, tok_per_sec, ttft_ms, total_ms, mem_gb,
-        streaming=False
-    ))
+        new_tokens  = output.shape[1] - in_len
+        tok_per_sec = new_tokens / (total_ms / 1000) if total_ms > 0 else 0
+        text        = tokenizer.decode(output[0][in_len:], skip_special_tokens=True).strip()
+        mem_gb      = ModelManager._vram_used_gb()
 
-    return GenerateResponse(
-        text=text,
-        routing=RoutingInfo(**{
-            "tier":       decision.tier,
-            "precision":  decision.precision,
-            "reason":     decision.reason,
-            "prompt_len": decision.prompt_len,
-            "task_type":  decision.task_type,
-            "confidence": decision.confidence,
-        }),
-        tok_per_sec=round(tok_per_sec, 2),
-        ttft_ms=round(ttft_ms, 1),
-        total_ms=round(total_ms, 1),
-        mem_gb=round(mem_gb, 3),
-        model_id=manager.model_id,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-    )
+        # ── Log ───────────────────────────────────────────────────────────────
+        append_routing_log(_build_log_entry(
+            req.prompt, decision, tok_per_sec, ttft_ms, total_ms, mem_gb,
+            streaming=False
+        ))
+
+        return GenerateResponse(
+            text=text,
+            routing=RoutingInfo(**{
+                "tier":       decision.tier,
+                "precision":  decision.precision,
+                "reason":     decision.reason,
+                "prompt_len": decision.prompt_len,
+                "task_type":  decision.task_type,
+                "confidence": decision.confidence,
+            }),
+            tok_per_sec=round(tok_per_sec, 2),
+            ttft_ms=round(ttft_ms, 1),
+            total_ms=round(total_ms, 1),
+            mem_gb=round(mem_gb, 3),
+            model_id=manager.model_id,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
+    finally:
+        release_slot()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -390,6 +433,7 @@ async def generate_stream(req: GenerateRequest):
         decision.reason    = f"Forced by caller to {req.force_tier} tier"
 
     logger.info("POST /generate/stream | tier=%s | prompt=%.60s...", decision.tier, req.prompt)
+    release_slot = await acquire_tier_slot(decision.tier)
 
     try:
         model, tokenizer = manager.get(decision.tier)
@@ -457,46 +501,50 @@ async def generate_stream(req: GenerateRequest):
         }
         yield f"data: {json.dumps(preamble)}\n\n"
 
-        for token_text in streamer:
-            if gen_state["error"]:
-                yield f"data: {json.dumps({'error': gen_state['error']})}\n\n"
-                break
+        try:
+            for token_text in streamer:
+                if gen_state["error"]:
+                    yield f"data: {json.dumps({'error': gen_state['error']})}\n\n"
+                    break
 
-            if not ttft_recorded:
-                ttft_ms = (time.perf_counter() - start_time) * 1000
-                ttft_recorded = True
-            else:
-                ttft_ms = 0.0
+                if not ttft_recorded:
+                    ttft_ms = (time.perf_counter() - start_time) * 1000
+                    ttft_recorded = True
+                else:
+                    ttft_ms = 0.0
 
-            token_count += 1
-            yield f"data: {json.dumps({'token': token_text})}\n\n"
+                token_count += 1
+                yield f"data: {json.dumps({'token': token_text})}\n\n"
 
-        # ── Final metadata event ───────────────────────────────────────────────
-        total_ms    = (time.perf_counter() - start_time) * 1000
-        tok_per_sec = token_count / (total_ms / 1000) if total_ms > 0 else 0
-        mem_gb      = ModelManager._vram_used_gb()
+            # ── Final metadata event ───────────────────────────────────────────
+            total_ms    = (time.perf_counter() - start_time) * 1000
+            tok_per_sec = token_count / (total_ms / 1000) if total_ms > 0 else 0
+            mem_gb      = ModelManager._vram_used_gb()
 
-        done_payload = {
-            "done":        True,
-            "tok_per_sec": round(tok_per_sec, 2),
-            "total_ms":    round(total_ms, 1),
-            "token_count": token_count,
-            "mem_gb":      round(mem_gb, 3),
-        }
-        yield f"data: {json.dumps(done_payload)}\n\n"
+            done_payload = {
+                "done":        True,
+                "tok_per_sec": round(tok_per_sec, 2),
+                "total_ms":    round(total_ms, 1),
+                "token_count": token_count,
+                "mem_gb":      round(mem_gb, 3),
+            }
+            yield f"data: {json.dumps(done_payload)}\n\n"
 
-        # ── Log ───────────────────────────────────────────────────────────────
-        # Approximate ttft for log (streamer doesn't expose per-token timing)
-        approx_ttft = (total_ms / token_count) if token_count > 0 else total_ms
-        append_routing_log(_build_log_entry(
-            req.prompt, decision, tok_per_sec, approx_ttft, total_ms, mem_gb,
-            streaming=True
-        ))
+            # ── Log ───────────────────────────────────────────────────────────
+            # Approximate ttft for log (streamer doesn't expose per-token timing)
+            approx_ttft = (total_ms / token_count) if token_count > 0 else total_ms
+            append_routing_log(_build_log_entry(
+                req.prompt, decision, tok_per_sec, approx_ttft, total_ms, mem_gb,
+                streaming=True
+            ))
 
-        logger.info(
-            "Stream complete | tier=%s | tokens=%d | tok/s=%.1f | total=%.0fms",
-            decision.tier, token_count, tok_per_sec, total_ms
-        )
+            logger.info(
+                "Stream complete | tier=%s | tokens=%d | tok/s=%.1f | total=%.0fms",
+                decision.tier, token_count, tok_per_sec, total_ms
+            )
+        finally:
+            # Ensure slot release on disconnects/cancellations/errors.
+            release_slot()
 
     return StreamingResponse(
         token_generator(),
@@ -614,7 +662,12 @@ async def health():
 @app.get("/status", tags=["system"])
 async def status():
     """Detailed model manager status including VRAM usage per tier."""
-    return manager.status()
+    status_data = manager.status()
+    status_data["queue_control"] = {
+        "max_concurrent_per_tier": MAX_CONCURRENT_PER_TIER,
+        "max_queue_wait_ms": MAX_QUEUE_WAIT_MS,
+    }
+    return status_data
 
 
 # ══════════════════════════════════════════════════════════════════════════════

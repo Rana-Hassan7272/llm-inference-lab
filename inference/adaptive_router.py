@@ -110,6 +110,18 @@ CREATIVE_PATTERNS = [
     r"\bimagine\b", r"\bpretend\b", r"\brole[\s-]?play\b",
 ]
 
+QUALITY_PATTERNS = [
+    r"\bthreat model\b", r"\bincident postmortem\b", r"\bpostmortem\b",
+    r"\bprincipal engineer\b", r"\bcompliance\b", r"\baudit(?:ability)?\b",
+    r"\bmulti-tenant\b", r"\bmulti[\s-]?region\b", r"\bfailover\b",
+    r"\bzero[\s-]?trust\b", r"\bcapacity planning\b", r"\brisk\b",
+    r"\barchitecture decision record\b", r"\badr\b",
+    r"\bdistributed system\b", r"\bconsistency\b", r"\btrade[- ]?offs?\b",
+    r"\brollout\b", r"\bmigration plan\b", r"\bslo\b", r"\berror budget\b",
+    r"\bgovernance\b", r"\bsecurity\b", r"\bprivacy\b",
+    r"\bquantum\b", r"\bbell(?:'s)? theorem\b", r"\bepr\b", r"\bdecoherence\b",
+]
+
 
 def classify_task(prompt: str) -> tuple[str, float]:
     """
@@ -171,6 +183,12 @@ def route(prompt: str, tokenizer=None) -> RoutingDecision:
         prompt_len = len(prompt.split())   # approximate
 
     task_type, confidence = classify_task(prompt)
+    lower = prompt.lower().strip()
+    quality_hits = sum(1 for p in QUALITY_PATTERNS if re.search(p, lower))
+    comma_count = prompt.count(",")
+    colon_count = prompt.count(":")
+    semicolon_count = prompt.count(";")
+    structure_score = comma_count + colon_count + semicolon_count
 
     # ── Rule 1: Very long prompts always go to FP16 ──────────────────────────
     # Long context = more KV cache = 4-bit/8-bit errors compound more
@@ -181,7 +199,30 @@ def route(prompt: str, tokenizer=None) -> RoutingDecision:
             prompt_len=prompt_len, task_type=task_type, confidence=confidence
         )
 
-    # ── Rule 2: Short + simple → fast lane ───────────────────────────────────
+    # ── Rule 2: Explicitly high-stakes/complex prompts → quality ─────────────
+    if quality_hits >= 2:
+        return RoutingDecision(
+            tier="quality", precision="FP16",
+            reason=f"High-stakes/complex markers detected (hits={quality_hits})",
+            prompt_len=prompt_len, task_type=task_type, confidence=max(confidence, 0.70)
+        )
+
+    if prompt_len >= 70 and quality_hits >= 1:
+        return RoutingDecision(
+            tier="quality", precision="FP16",
+            reason=f"Long technical prompt with quality marker (len={prompt_len}, hits={quality_hits})",
+            prompt_len=prompt_len, task_type=task_type, confidence=max(confidence, 0.66)
+        )
+
+    # Structured prompts with multiple clauses usually need higher-fidelity output.
+    if prompt_len >= 35 and structure_score >= 6 and task_type in ("reasoning", "unknown"):
+        return RoutingDecision(
+            tier="quality", precision="FP16",
+            reason=f"Structured multi-clause prompt (len={prompt_len}, structure={structure_score})",
+            prompt_len=prompt_len, task_type=task_type, confidence=max(confidence, 0.62)
+        )
+
+    # ── Rule 3: Short + simple → fast lane ───────────────────────────────────
     if prompt_len < 50 and task_type == "simple" and confidence >= 0.55:
         return RoutingDecision(
             tier="fast", precision="4-bit",
@@ -189,7 +230,7 @@ def route(prompt: str, tokenizer=None) -> RoutingDecision:
             prompt_len=prompt_len, task_type=task_type, confidence=confidence
         )
 
-    # ── Rule 3: Reasoning / coding / creative → balanced ─────────────────────
+    # ── Rule 4: Reasoning / coding / creative → balanced ─────────────────────
     if task_type in ("reasoning", "creative"):
         return RoutingDecision(
             tier="balanced", precision="8-bit",
@@ -197,12 +238,20 @@ def route(prompt: str, tokenizer=None) -> RoutingDecision:
             prompt_len=prompt_len, task_type=task_type, confidence=confidence
         )
 
-    # ── Rule 4: Medium length + low confidence → balanced ────────────────────
+    # ── Rule 5: Medium length + low confidence → balanced ────────────────────
     if 50 <= prompt_len <= 200 and confidence < 0.60:
         return RoutingDecision(
             tier="balanced", precision="8-bit",
             reason=f"Ambiguous task ({prompt_len} tokens, conf={confidence:.2f}) — defaulting to balanced",
             prompt_len=prompt_len, task_type=task_type, confidence=confidence
+        )
+
+    # ── Rule 6: Unknown but non-trivial complexity → quality fallback ────────
+    if task_type == "unknown" and prompt_len >= 35:
+        return RoutingDecision(
+            tier="quality", precision="FP16",
+            reason=f"Unknown task with non-trivial length (len={prompt_len}) — safer quality fallback",
+            prompt_len=prompt_len, task_type=task_type, confidence=max(confidence, 0.58)
         )
 
     # ── Default: short+simple but low confidence → still fast ────────────────

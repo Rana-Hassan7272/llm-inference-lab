@@ -1,0 +1,98 @@
+{
+  "dataset": "C:\\Users\\PMY\\Desktop\\ARTIFICIAL INTELLIGENCE\\MachineLearningProjects\\llm-inference-lab\\benchmarks\\router_eval_dataset.json",
+  "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "used_tokenizer": true,
+  "total": 45,
+  "correct": 40,
+  "accuracy": 0.888889,
+  "macro_f1": 0.890367,
+  "confusion_matrix": {
+    "fast": {
+      "fast": 14,
+      "balanced": 1,
+      "quality": 0
+    },
+    "balanced": {
+      "fast": 0,
+      "balanced": 14,
+      "quality": 1
+    },
+    "quality": {
+      "fast": 0,
+      "balanced": 3,
+      "quality": 12
+    }
+  },
+  "per_tier_metrics": {
+    "fast": {
+      "precision": 1.0,
+      "recall": 0.9333,
+      "f1": 0.9655,
+      "support": 15
+    },
+    "balanced": {
+      "precision": 0.7778,
+      "recall": 0.9333,
+      "f1": 0.8485,
+      "support": 15
+    },
+    "quality": {
+      "precision": 0.9231,
+      "recall": 0.8,
+      "f1": 0.8571,
+      "support": 15
+    }
+  },
+  "errors": [
+    {
+      "index": 8,
+      "expected_tier": "fast",
+      "predicted_tier": "balanced",
+      "task_type": "reasoning",
+      "confidence": 0.55,
+      "prompt_len": 11,
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.55) \u2014 balanced precision",
+      "prompt": "What is HTTP status code 500?"
+    },
+    {
+      "index": 29,
+      "expected_tier": "balanced",
+      "predicted_tier": "quality",
+      "task_type": "simple",
+      "confidence": 0.7,
+      "prompt_len": 16,
+      "reason": "High-stakes/complex markers detected (hits=2)",
+      "prompt": "Summarize key trade-offs between eventual and strong consistency."
+    },
+    {
+      "index": 35,
+      "expected_tier": "quality",
+      "predicted_tier": "balanced",
+      "task_type": "reasoning",
+      "confidence": 0.55,
+      "prompt_len": 36,
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.55) \u2014 balanced precision",
+      "prompt": "Write a long-form technical explanation of how transformer attention scales with context length, including computational complexity, memory growth, KV cache behavior, and practical serving implications."
+    },
+    {
+      "index": 36,
+      "expected_tier": "quality",
+      "predicted_tier": "balanced",
+      "task_type": "reasoning",
+      "confidence": 0.55,
+      "prompt_len": 49,
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.55) \u2014 balanced precision",
+      "prompt": "Develop an end-to-end SRE plan for a latency-sensitive LLM API under bursty traffic, covering SLOs, error budgets, autoscaling policy, queue management, and runbook design."
+    },
+    {
+      "index": 43,
+      "expected_tier": "quality",
+      "predicted_tier": "balanced",
+      "task_type": "reasoning",
+      "confidence": 0.55,
+      "prompt_len": 31,
+      "reason": "Reasoning/creative task (task=reasoning, conf=0.55) \u2014 balanced precision",
+      "prompt": "Design a low-latency recommendation system architecture with online features, model serving, feedback loops, and graceful degradation when dependencies fail."
+    }
+  ]
+}

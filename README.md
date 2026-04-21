@@ -188,6 +188,30 @@ forced quality flag OR long context               →  quality  (FP16 full preci
 
 All routing decisions are logged to `results/routing_log.jsonl` and surfaced in the dashboard's routing log panel. The `/router/explain` endpoint returns the routing decision with reasoning for any given prompt before generation.
 
+### Router Validation (Labeled Evaluation Set)
+
+The router is validated offline on a labeled 45-prompt dataset (`benchmarks/router_eval_dataset.json`) using `benchmarks/router_eval.py`.
+
+Latest evaluation:
+
+| Metric | Value |
+|---|---:|
+| Accuracy | **88.89%** (40/45) |
+| Macro F1 | **0.8904** |
+| Fast tier F1 | **0.9655** |
+| Balanced tier F1 | **0.8485** |
+| Quality tier F1 | **0.8571** |
+
+Confusion matrix (rows=true, cols=pred):
+
+| True \ Pred | Fast | Balanced | Quality |
+|---|---:|---:|---:|
+| Fast | 14 | 1 | 0 |
+| Balanced | 0 | 14 | 1 |
+| Quality | 0 | 3 | 12 |
+
+This validation loop makes routing quality measurable and repeatable, so router rule changes are tracked by metrics instead of intuition.
+
 ---
 
 ## Repo Structure
@@ -327,6 +351,23 @@ curl "https://llm-inference-lab.onrender.com/router/explain?prompt=Write+a+poem"
 ```bash
 curl https://llm-inference-lab.onrender.com/health
 ```
+
+### Concurrency Control & Backpressure
+
+To prevent unbounded queueing under load, the API now enforces per-tier admission control:
+
+- `MAX_CONCURRENT_PER_TIER` (default: `1`) — max in-flight generations per tier (`fast`/`balanced`/`quality`)
+- `MAX_QUEUE_WAIT_MS` (default: `2500`) — max wait time to enter a tier queue
+
+If a tier is saturated longer than `MAX_QUEUE_WAIT_MS`, the API returns `429` quickly instead of allowing latency to grow indefinitely.
+
+Example local run:
+
+```bash
+MAX_QUEUE_WAIT_MS=1200 MAX_CONCURRENT_PER_TIER=1 uvicorn api.app:app --host 0.0.0.0 --port 8000
+```
+
+Queue-control values are visible in `GET /status` under `queue_control`.
 
 ---
 
