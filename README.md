@@ -29,6 +29,8 @@ Most LLM projects stop at "call the API and log the latency." This project goes 
 | 🖥️ Dashboard | [llm-inference-lab.vercel.app](https://llm-inference-lab.vercel.app/) | React + Vite → Vercel |
 | ⚡ API | [llm-inference-lab.onrender.com](https://llm-inference-lab.onrender.com/) | FastAPI → Docker → Render |
 
+For a single reviewer-friendly benchmark digest, see [`RESULTS.md`](RESULTS.md).
+
 ---
 
 ## Dashboard
@@ -109,7 +111,7 @@ Measured on TinyLlama-1.1B, Tesla T4, 64 fixed new tokens.
 
 The speedup is superlinear. At 1024-token context, KV cache is not a nice-to-have — it is a 10× throughput requirement. Without it, the model re-computes the full attention matrix from scratch at every generation step: O(T²) work per token. With cache: O(1) per step for the new token.
 
-![KV Cache Speedup](https://github.com/Rana-Hassan7272/llm-inference-lab/raw/main/results/kv_cache_experiment-results/kv_cache_speedup.png)
+![KV Cache Speedup](results/kv_cache_experiment-results/kv_cache_speedup.png)
 
 ---
 
@@ -124,7 +126,7 @@ The speedup is superlinear. At 1024-token context, KV cache is not a nice-to-hav
 
 Static batching achieves near-linear scaling up to batch 8 on a T4. GPU parallelism means batching 8 requests costs nearly the same VRAM bandwidth as batching 1 — you get 8× the throughput for ~1× the memory cost.
 
-![Batching Throughput](https://github.com/Rana-Hassan7272/llm-inference-lab/raw/main/results/batching-results/batching_throughput.png)
+![Batching Throughput](results/batching-results/batching_throughput.png)
 
 ---
 
@@ -139,7 +141,7 @@ Static batching achieves near-linear scaling up to batch 8 on a T4. GPU parallel
 
 vLLM's PagedAttention removes the fixed KV cache allocation overhead that limits manual batching. At batch 1 the gap is 3.5× — vLLM is running continuous batching under the hood even for a "single" request. At batch 8 the gap narrows slightly to 2.86× as manual batching becomes more GPU-efficient, but vLLM still wins at every point.
 
-![vLLM Comparison](https://github.com/Rana-Hassan7272/llm-inference-lab/raw/main/results/vllm/vllm_comparison.png)
+![vLLM Comparison](results/vllm/vllm_comparison.png)
 
 ---
 
@@ -155,6 +157,8 @@ Measured with Locust against the API running locally (Colab → localhost). Zero
 | 20 | 4.61 | 2,932 ms | 3,800 ms | 0.0% |
 
 Throughput plateaus at ~4.6 req/s between users=10 and users=20 — the system hits its generation-time ceiling (single GPU, one inference thread). The API queue handles the overflow: latency climbs linearly but the **failure rate stays at 0%** even at 20 concurrent users. This is the production-reliability result that matters.
+
+![Load Testing Concurrency](results/load-testing/load_test_concurrency.png)
 
 ---
 
@@ -211,6 +215,8 @@ Confusion matrix (rows=true, cols=pred):
 | Quality | 0 | 3 | 12 |
 
 This validation loop makes routing quality measurable and repeatable, so router rule changes are tracked by metrics instead of intuition.
+
+![Router Confusion Matrix](results/router_eval_confusion.png)
 
 ---
 
